@@ -52,7 +52,7 @@ async function startServer() {
 
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log('══════════════════════════════════════════════');
-    console.log(`🚄 RailPulse Server running on port ${PORT} (0.0.0.0)`);
+    console.log(`🚄 RailMind Server running on port ${PORT} (0.0.0.0)`);
     console.log(`📡 Socket.IO ready`);
     console.log(`⏱️  Simulation speed: ${process.env.SIM_SPEED || 24}×`);
     console.log('══════════════════════════════════════════════');

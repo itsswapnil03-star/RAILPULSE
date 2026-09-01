@@ -1,4 +1,4 @@
-"""Feature engineering for the RailPulse delay prediction model."""
+"""Feature engineering for the RailMind delay prediction model."""
 import pandas as pd
 import numpy as np
 

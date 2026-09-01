@@ -1,5 +1,5 @@
 /**
- * RailPulse Conflict Detection & Decision Support Engine (Features 1 & 2)
+ * RailMind Conflict Detection & Decision Support Engine (Features 1 & 2)
  * Detects platform/junction overlaps within buffer minutes and generates imperative controller recommendations.
  */
 

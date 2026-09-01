@@ -1,6 +1,6 @@
-# RailPulse System Architecture
+# RailMind System Architecture
 
-RailPulse is a highly scalable, event-driven system designed to predict and distribute real-time train ETAs. It comprises three independent services to handle the complexities of data ingestion, Machine Learning predictions, and real-time client updates.
+RailMind is a highly scalable, event-driven system designed to predict and distribute real-time train ETAs. It comprises three independent services to handle the complexities of data ingestion, Machine Learning predictions, and real-time client updates.
 
 ## High-Level Diagram
 

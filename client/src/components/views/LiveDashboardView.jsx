@@ -232,7 +232,7 @@ export default function LiveDashboardView({ onNavigateToStation }) {
     return (
       <div className="min-h-[400px] flex flex-col items-center justify-center p-8 text-center">
         <div className="w-12 h-12 rounded-full border-4 border-[#4c9aff]/20 border-t-[#4c9aff] animate-spin mb-4" />
-        <div className="text-sm font-mono text-[#e9eff9] font-bold">Connecting to RailPulse Real-time Telemetry...</div>
+        <div className="text-sm font-mono text-[#e9eff9] font-bold">Connecting to RailMind Real-time Telemetry...</div>
         <div className="text-xs font-mono text-[#8ba0be] mt-1">Loading Maharashtra train corridors & live GPS feeds</div>
       </div>
     );

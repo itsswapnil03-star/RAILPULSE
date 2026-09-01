@@ -206,7 +206,7 @@ export default function RouteMapDemoView() {
         
         {/* Left: Brand Title */}
         <div className="flex items-baseline gap-2.5">
-          <span className="text-xl font-extrabold tracking-tight text-white">RailPulse</span>
+          <span className="text-xl font-extrabold tracking-tight text-white">RailMind</span>
           <span className="text-xs text-[#7ba4d5] font-normal">
             Maharashtra route demo — simulated live position
           </span>

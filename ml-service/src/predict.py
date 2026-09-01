@@ -1,5 +1,5 @@
 """
-RailPulse ML Prediction Service
+RailMind ML Prediction Service
 FastAPI endpoint serving trained GBR model for train delay prediction.
 """
 from fastapi import FastAPI, HTTPException
@@ -16,7 +16,7 @@ from .features import prepare_features, get_top_factors
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="RailPulse ML Service", version="1.0.0")
+app = FastAPI(title="RailMind ML Service", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # Model version identifier

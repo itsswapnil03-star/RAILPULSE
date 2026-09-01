@@ -28,10 +28,10 @@ export default function Navbar({ selectedStationCode = 'PUNE', onSelectStation }
           className="flex items-center gap-2.5 cursor-pointer group"
         >
           <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#006591] to-[#0ea5e9] flex items-center justify-center text-white font-black text-sm shadow-md">
-            RP
+            RM
           </div>
           <span className="font-extrabold text-xl tracking-tight text-[#0F172A]">
-            RailPulse
+            RailMind
           </span>
         </div>
       </div>

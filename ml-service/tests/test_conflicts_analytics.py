@@ -1,12 +1,12 @@
 """
-Unit tests for RailPulse Conflict Detection (Feature 1 & 2) and Corridor Trend Analytics (Feature 3).
+Unit tests for RailMind Conflict Detection (Feature 1 & 2) and Corridor Trend Analytics (Feature 3).
 """
 import pytest
 from datetime import datetime, timedelta
 
 def detect_conflicts_py(active_runs, buffer_minutes=6):
     """
-    Python reference implementation of the RailPulse conflict detection logic.
+    Python reference implementation of the RailMind conflict detection logic.
     """
     station_map = {}
     for run in active_runs:

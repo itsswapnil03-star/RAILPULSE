@@ -1,9 +1,9 @@
-# RailPulse 🚄
+# RailMind 🚄
 
 **Dynamic Forecast of Expected Time of Arrival (ETA) for Coaching Trains**  
 *A smart prototype for SIH26028 (Ministry of Railways)*
 
-RailPulse replaces static railway timetables with continuously-updating, AI-predicted arrival times that self-correct in real-time as delays, weather, and congestion change along a train's route.
+RailMind replaces static railway timetables with continuously-updating, AI-predicted arrival times that self-correct in real-time as delays, weather, and congestion change along a train's route.
 
 ## 🚀 Setup Instructions (< 5 minutes)
 
