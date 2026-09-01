@@ -1,24 +1,22 @@
 import express from 'express';
 import HistoricalTrend from '../models/HistoricalTrend.js';
+import { apiCache } from '../utils/cache.js';
 
 const router = express.Router();
 
-/**
- * GET /api/analytics/corridor-trend
- * Query Params: corridor (e.g. 'CSMT-SUR' or 'MUMBAI_PUNE_SOLAPUR'), days (default 7), trainNumber (optional)
- * Returns aggregated time series of predicted delay vs actual delay.
- */
 router.get('/corridor-trend', async (req, res) => {
-  try {
-    const { corridor = 'CSMT-SUR', days = 7, trainNumber } = req.query;
-    const daysNum = Math.min(30, Math.max(1, parseInt(days) || 7));
+  const { corridor = 'CSMT-SUR', days = 7, trainNumber } = req.query;
+  const cacheKey = `trend_${corridor}_${days}_${trainNumber || 'all'}`;
+  const cached = apiCache.get(cacheKey);
+  if (cached) return res.json(cached);
 
+  try {
+    const daysNum = Math.min(30, Math.max(1, parseInt(days) || 7));
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysNum);
 
     const query = { timestamp: { $gte: cutoffDate } };
     if (corridor) {
-      // Normalize corridor search
       const normalized = corridor.toUpperCase().replace(/\s+/g, '_');
       query.$or = [
         { corridor: new RegExp(normalized, 'i') },
@@ -31,11 +29,9 @@ router.get('/corridor-trend', async (req, res) => {
 
     const trends = await HistoricalTrend.find(query).sort({ timestamp: 1 }).lean();
 
-    // Group by Date for 7-day daily aggregation
     const dateMap = new Map();
     const now = new Date();
 
-    // Initialize all past N days to guarantee continuous series
     for (let d = daysNum - 1; d >= 0; d--) {
       const targetDay = new Date(now);
       targetDay.setDate(targetDay.getDate() - d);
@@ -51,7 +47,6 @@ router.get('/corridor-trend', async (req, res) => {
       });
     }
 
-    // Populate with database records
     for (const t of trends) {
       const dateStr = t.date || (t.timestamp ? new Date(t.timestamp).toISOString().split('T')[0] : null);
       if (dateStr && dateMap.has(dateStr)) {
@@ -62,7 +57,6 @@ router.get('/corridor-trend', async (req, res) => {
       }
     }
 
-    // Compute averages and fallback realistic synthetic data if sparse
     const corridorBaseDelay = corridor.includes('NGP') ? 14 : corridor.includes('SUR') ? 8 : 10;
 
     const resultSeries = Array.from(dateMap.values()).map((item, idx) => {
@@ -79,7 +73,6 @@ router.get('/corridor-trend', async (req, res) => {
         };
       }
 
-      // Consistent pseudo-deterministic seed fallback based on day index
       const seedVariance = ((idx * 7 + 13) % 9) - 4;
       const pred = Math.max(2, corridorBaseDelay + seedVariance);
       const actualVariance = ((idx * 3 + 5) % 5) - 2;
@@ -95,12 +88,15 @@ router.get('/corridor-trend', async (req, res) => {
       };
     });
 
-    res.json({
+    const payload = {
       corridor,
       days: daysNum,
       totalRecords: trends.length,
       trendData: resultSeries
-    });
+    };
+
+    apiCache.set(cacheKey, payload, 5000);
+    res.json(payload);
   } catch (err) {
     console.error('Error fetching corridor trend:', err);
     res.status(500).json({ error: 'Failed to fetch corridor trend analytics' });

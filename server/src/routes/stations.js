@@ -3,12 +3,17 @@ import Station from '../models/Station.js';
 import TrainRun from '../models/TrainRun.js';
 import Train from '../models/Train.js';
 import { simulationEngine } from '../services/simulationEngine.js';
+import { apiCache } from '../utils/cache.js';
 
 const router = Router();
 
 router.get('/', async (req, res) => {
+  const cached = apiCache.get('all_stations');
+  if (cached) return res.json(cached);
+
   try {
     const stations = await Station.find({}).sort({ kmFromOrigin: 1 }).lean();
+    apiCache.set('all_stations', stations, 10000);
     res.json(stations);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -16,8 +21,13 @@ router.get('/', async (req, res) => {
 });
 
 router.get('/:code/board', async (req, res) => {
+  const code = req.params.code.toUpperCase();
+  const cacheKey = `board_${code}`;
+  const cached = apiCache.get(cacheKey);
+  if (cached) return res.json(cached);
+
   try {
-    const station = await Station.findOne({ code: req.params.code.toUpperCase() }).lean();
+    const station = await Station.findOne({ code }).lean();
     if (!station) return res.status(404).json({ error: 'Station not found' });
     
     const runs = await TrainRun.find({ status: { $ne: 'completed' } }).lean();
@@ -61,11 +71,14 @@ router.get('/:code/board', async (req, res) => {
     
     arrivals.sort((a, b) => new Date(a.expectedArrival || 0) - new Date(b.expectedArrival || 0));
     
-    res.json({
+    const payload = {
       station,
       currentTime: simulationEngine.simulatedTime?.toISOString(),
       arrivals
-    });
+    };
+
+    apiCache.set(cacheKey, payload, 2000);
+    res.json(payload);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
