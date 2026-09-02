@@ -5,6 +5,7 @@ import HistoricalTrend from '../models/HistoricalTrend.js';
 import { predictDelay } from './mlClient.js';
 import { injectRandomDelay, createExplicitDelayEvent } from './delayInjector.js';
 import { detectConflicts, resolveConflict, clearResolvedConflicts } from './conflictDetector.js';
+import { apiCache } from '../utils/cache.js';
 
 const TICK_INTERVAL_MS = 1000;
 const TIME_MULTIPLIER = parseInt(process.env.SIM_SPEED || '15');
@@ -457,6 +458,10 @@ class SimulationEngine {
     const event = createExplicitDelayEvent(eventType, description);
     if (severity) event.severity = severity;
 
+    const delayAdded = event.delayMinutes || 12;
+    run.currentDelay = (run.currentDelay || 0) + delayAdded;
+    run.currentSpeed = Math.max(25, Math.round((run.currentSpeed || 85) * (1 - (event.speedReduction || 0.4))));
+
     run.activeDelayEvent = {
       type: event.type,
       category: event.category,
@@ -465,15 +470,45 @@ class SimulationEngine {
       speedReduction: event.speedReduction,
       startedAtKm: run.currentKm,
       remainingTicks: event.durationTicks,
-      impactMinutes: event.delayMinutes
+      impactMinutes: delayAdded
     };
 
     if (event.weatherCondition) run.weather.condition = event.weatherCondition;
-    if (event.congestionDelta) run.congestionLevel = Math.min(0.9, run.congestionLevel + event.congestionDelta);
+    if (event.congestionDelta) run.congestionLevel = Math.min(0.9, (run.congestionLevel || 0.2) + event.congestionDelta);
+
+    // Update upcoming station log predicted delays
+    const startIdx = Math.max(0, run.nextStationIndex || 0);
+    if (run.stationLog && run.stationLog.length > 0) {
+      for (let i = startIdx; i < run.stationLog.length; i++) {
+        run.stationLog[i].predictedDelayMinutes = (run.stationLog[i].predictedDelayMinutes || 0) + delayAdded;
+      }
+    }
 
     await run.save();
+
+    // Clear in-memory API cache immediately
+    apiCache.clear();
+
+    // Broadcast updated train immediately via WebSockets
+    if (this.io) {
+      const runData = run.toObject ? run.toObject() : run;
+      this.io.emit('train:update', runData);
+
+      const allRuns = await TrainRun.find({}).lean();
+      this.io.emit('trains:fleet', allRuns);
+      this.io.emit('network:stats', this.computeNetworkStats(allRuns));
+
+      // Re-scan and broadcast conflict alerts immediately
+      try {
+        const trains = await Train.find({}).lean();
+        const trainMap = new Map(trains.map(t => [t.trainNumber, t]));
+        this.activeAlerts = detectConflicts(allRuns, trainMap, 6);
+        this.io.emit('conflicts:alerts', this.activeAlerts);
+      } catch (e) {}
+    }
+
     this.emitDelayEvent(run, event);
-    return true;
+    return { success: true, delayAdded, totalDelay: run.currentDelay };
   }
 
   async executeResolutionAction(actionData) {

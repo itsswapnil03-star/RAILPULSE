@@ -22,6 +22,7 @@ import {
 } from 'recharts';
 import { injectSimulationEvent, resetSimulation, fetchPredictions, fetchCorridorTrend, executeResolutionAction, fetchStations } from '../../services/api';
 import { formatTime } from '../../utils/formatTime';
+import { getTrainDelay } from '../../utils/trainUtils';
 import LiveGISMap from '../map/LiveGISMap';
 
 const DELAY_REASONS_CATALOG = [
@@ -41,13 +42,14 @@ const DELAY_REASONS_CATALOG = [
 ];
 
 export default function ControlRoomView() {
-  const { trainsList, networkStats, alerts: socketAlerts, simulatedTime } = useSocket();
+  const { trains, trainsList, networkStats, alerts: socketAlerts, simulatedTime } = useSocket();
   const [selectedTrainNumber, setSelectedTrainNumber] = useState('22225');
   const [searchQuery, setSearchQuery] = useState('');
   const [predictions, setPredictions] = useState([]);
   const [stations, setStations] = useState([]);
   const [selectedDisruption, setSelectedDisruption] = useState('weather_fog');
   const [injectStatus, setInjectStatus] = useState('');
+  const [injectedOverrides, setInjectedOverrides] = useState({});
   const [activeCategoryFilter, setActiveCategoryFilter] = useState('all');
   const [routeViewMode, setRouteViewMode] = useState('progression'); // 'progression' | 'gis'
 
@@ -85,7 +87,7 @@ export default function ControlRoomView() {
       let lastArrivedStation = null;
       let destinationStation = schedule[schedule.length - 1] || null;
 
-      const run = t.currentRun || t;
+      const run = (trains && trains.get(t.trainNumber)) || t.currentRun || t;
       const stationLog = run.stationLog || schedule;
 
       if (stationLog && stationLog.length > 0) {
@@ -93,7 +95,6 @@ export default function ControlRoomView() {
         haltsCompleted = arrived.length;
         if (arrived.length > 0) {
           lastArrivedStation = arrived[arrived.length - 1];
-          currentDelay = lastArrivedStation.delayMinutes || 0;
         }
 
         const upcoming = stationLog.filter(s => !s.arrived);
@@ -102,10 +103,25 @@ export default function ControlRoomView() {
         }
       }
 
+      // Prioritize live socket run currentDelay immediately
+      if (run.currentDelay !== undefined && run.currentDelay !== null && run.currentDelay !== 0) {
+        currentDelay = run.currentDelay;
+      } else if (lastArrivedStation && lastArrivedStation.delayMinutes !== undefined && lastArrivedStation.delayMinutes !== null) {
+        currentDelay = lastArrivedStation.delayMinutes;
+      } else {
+        currentDelay = getTrainDelay(t, trains);
+      }
+
+      // Incorporate optimistic instant injected delay
+      if (injectedOverrides[t.trainNumber]) {
+        currentDelay = Math.max(currentDelay, injectedOverrides[t.trainNumber]);
+      }
+
       const confidencePercent = Math.max(75, Math.min(98, Math.round(96 - (currentDelay * 0.5))));
 
       return {
         ...t,
+        currentRun: run,
         currentDelay,
         haltsCompleted,
         totalHalts,
@@ -113,12 +129,12 @@ export default function ControlRoomView() {
         lastArrivedStation,
         destinationStation,
         confidencePercent,
-        currentKm: Math.round(run.currentKm || 0),
+        currentKm: Math.round(run.currentKm || t.currentKm || 0),
         totalKm: Math.round(run.totalKm || t.totalKm || 100),
-        currentSpeed: Math.round(run.currentSpeed || 0)
+        currentSpeed: Math.round(run.currentSpeed || t.currentSpeed || (currentDelay > 5 ? 55 : 85))
       };
     });
-  }, [trainsList]);
+  }, [trainsList, trains, injectedOverrides]);
 
   // Selected Train
   const selectedTrain = useMemo(() => {
@@ -310,13 +326,29 @@ export default function ControlRoomView() {
   const handleInjectDisruption = async () => {
     if (!selectedTrain) return;
     const cat = DELAY_REASONS_CATALOG.find(d => d.id === selectedDisruption);
+    const addedMinutes = cat?.id === 'weather_monsoon' ? 14 : cat?.id === 'signal_failure' ? 12 : 8;
+    const targetTrainNum = selectedTrain.trainNumber;
+
+    // 1. Optimistically update local UI state immediately (0ms delay)
+    setInjectedOverrides(prev => ({
+      ...prev,
+      [targetTrainNum]: (selectedTrain.currentDelay || 0) + addedMinutes
+    }));
+    setInjectStatus(`✓ Injected "${cat ? cat.title : selectedDisruption}" (+${addedMinutes}m) into Train #${targetTrainNum}!`);
+
     try {
       await injectSimulationEvent(
-        selectedTrain.trainNumber,
+        targetTrainNum,
         selectedDisruption,
         cat ? cat.title : 'Operational Delay'
       );
-      setInjectStatus(`✓ Injected "${cat ? cat.title : selectedDisruption}" into Train #${selectedTrain.trainNumber}!`);
+
+      // 2. Immediately refresh predictions to update XAI attributions
+      fetchPredictions(targetTrainNum).then(data => {
+        const list = Array.isArray(data) ? data : (data.predictions || []);
+        if (list.length > 0) setPredictions(list);
+      }).catch(() => {});
+
       setTimeout(() => setInjectStatus(''), 4000);
     } catch (e) {
       setInjectStatus(`Failed to inject: ${e.message}`);
