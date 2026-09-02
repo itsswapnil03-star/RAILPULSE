@@ -2,6 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { interpolateTrainPosition } from '../../services/api';
+import { getTrainDelay } from '../../utils/trainUtils';
 
 // Station icon for route stops
 const createRouteStationIcon = (isCovered = false, isCurrent = false, isTerminus = false) => {
@@ -189,9 +190,9 @@ export default function LiveGISMap({
   }, [targetTrain, stationsMap]);
 
   const runObj = targetTrain?.currentRun || targetTrain || {};
-  const currentSpeed = Math.round(runObj.currentSpeed || 0);
-  const isDelayed = (targetTrain?.currentDelay || runObj.currentDelay || 0) > 10;
-  const currentDelay = targetTrain?.currentDelay || runObj.currentDelay || 0;
+  const currentDelay = getTrainDelay(targetTrain);
+  const currentSpeed = Math.round(runObj.currentSpeed || (currentDelay > 10 ? 65 : 110));
+  const isDelayed = currentDelay > 10;
 
   return (
     <div className="w-full rounded-xl overflow-hidden border border-[#E2E8F0] relative shadow-md bg-white" style={{ height }}>

@@ -19,6 +19,8 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
+import { getTrainDelay as getTrainDelayUtil, getDelayBadgeInfo } from '../../utils/trainUtils';
+
 export default function PassengerView() {
   const { trains, trainsList, simulatedTime } = useSocket();
   const [selectedTrainNumber, setSelectedTrainNumber] = useState('');
@@ -30,33 +32,8 @@ export default function PassengerView() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchContainerRef = useRef(null);
 
-  // Helper function to extract or compute realistic delay for any train
-  const getTrainDelay = (trainObj) => {
-    if (!trainObj) return 0;
-    const runObj = trains.get(trainObj.trainNumber) || trainObj.currentRun || trainObj;
-    if (runObj.currentDelay !== undefined && runObj.currentDelay !== null && runObj.currentDelay !== 0) {
-      return runObj.currentDelay;
-    }
-    const log = runObj.stationLog || trainObj.schedule || [];
-    const arrivedStops = log.filter(s => s.arrived);
-    if (arrivedStops.length > 0) {
-      const lastHalt = arrivedStops[arrivedStops.length - 1];
-      if (lastHalt.delayMinutes !== undefined && lastHalt.delayMinutes !== null) {
-        return lastHalt.delayMinutes;
-      }
-    }
-    
-    // Authentic realistic Indian Railways delay distribution if unstarted/in simulation
-    const num = parseInt(String(trainObj.trainNumber).replace(/\D/g, '')) || 100;
-    const isVB = (trainObj.name || '').toLowerCase().includes('vande');
-    if (isVB) {
-      return (num % 4 === 0) ? 3 : 0;
-    }
-    const seed = (num * 13) % 10;
-    if (seed >= 6) return 12 + (num % 16); // 12-28 min delay
-    if (seed >= 3) return 4 + (num % 7);   // 4-10 min delay
-    return 0; // On time
-  };
+  // Unified realistic delay resolver
+  const getTrainDelay = (trainObj) => getTrainDelayUtil(trainObj, trains);
 
   // Initialize with first active train
   useEffect(() => {
