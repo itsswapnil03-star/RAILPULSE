@@ -425,22 +425,26 @@ export default function ControlRoomView() {
                       {(() => {
                         const runObj = selectedTrain.currentRun || selectedTrain;
                         const log = runObj.stationLog || selectedTrain.schedule || [];
-                        const nextIdx = runObj.nextStationIndex || 0;
-                        const curKm = runObj.currentKm || 0;
-                        const totKm = runObj.totalKm || selectedTrain.totalKm || 1;
-                        const progressPct = Math.min(100, Math.round((curKm / totKm) * 100));
+                        const totalHalts = log.length;
+                        const nextIdx = runObj.nextStationIndex !== undefined ? runObj.nextStationIndex : log.findIndex(s => !s.arrived);
+                        const currentStationIdx = Math.min(totalHalts - 1, Math.max(0, nextIdx >= 0 ? nextIdx : 0));
+                        
+                        // Exact percentage connecting to the current active station circle (where train is located)
+                        const linePct = totalHalts > 1 ? (currentStationIdx / (totalHalts - 1)) * 100 : 0;
 
                         return (
-                          <div className="min-w-[620px] py-4">
+                          <div className="min-w-[620px] py-4 px-2">
                             <div className="relative flex items-center justify-between">
-                              {/* Background Track Line */}
-                              <div className="absolute left-6 right-6 top-1/2 -translate-y-1/2 h-1 bg-[#E2E8F0] rounded-full z-0" />
+                              {/* Background Track Line centered vertically on station circles */}
+                              <div className="absolute left-[10px] right-[10px] top-[10px] -translate-y-1/2 h-[3px] bg-[#E2E8F0] rounded-full z-0" />
                               
-                              {/* Covered Track Line */}
-                              <div 
-                                className="absolute left-6 top-1/2 -translate-y-1/2 h-1 bg-[#0ea5e9] rounded-full z-0 transition-all duration-700"
-                                style={{ width: `${Math.max(0, Math.min(94, progressPct))}%` }}
-                              />
+                              {/* Covered Track Line extending accurately to the current train's station */}
+                              <div className="absolute left-[10px] right-[10px] top-[10px] -translate-y-1/2 h-[3px] z-0 pointer-events-none">
+                                <div 
+                                  className="h-full bg-gradient-to-r from-[#0ea5e9] to-[#006591] rounded-full transition-all duration-700"
+                                  style={{ width: `${Math.max(0, Math.min(100, linePct))}%` }}
+                                />
+                              </div>
 
                               {/* Station Nodes along the route */}
                               {log.map((st, sIdx) => {
