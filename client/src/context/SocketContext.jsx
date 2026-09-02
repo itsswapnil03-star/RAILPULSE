@@ -3,6 +3,12 @@ import { io } from 'socket.io-client';
 
 const SocketContext = createContext(null);
 
+// In production (Vercel) this must point at the Render backend, e.g.
+// https://railpulse-1.onrender.com — set VITE_API_URL in Vercel's
+// Environment Variables. Falls back to '' so local dev keeps using
+// the Vite proxy (see vite.config.js).
+const API_URL = import.meta.env.VITE_API_URL || '';
+
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
@@ -19,8 +25,8 @@ export const SocketProvider = ({ children }) => {
     const loadInitialData = async () => {
       try {
         const [trainsRes, statsRes] = await Promise.all([
-          fetch('/api/trains').then(r => r.json()),
-          fetch('/api/network/stats').then(r => r.json()).catch(() => ({}))
+          fetch(`${API_URL}/api/trains`).then(r => r.json()),
+          fetch(`${API_URL}/api/network/stats`).then(r => r.json()).catch(() => ({}))
         ]);
         if (isMounted && Array.isArray(trainsRes) && trainsRes.length > 0) {
           setTrains(new Map(trainsRes.map(t => [t.trainNumber, t])));
@@ -38,8 +44,9 @@ export const SocketProvider = ({ children }) => {
 
     loadInitialData();
 
-    // Connect via Vite proxy or relative host
-    const newSocket = io({
+    // Connect to the Render backend in production (VITE_API_URL),
+    // or via the Vite proxy / relative host in local dev.
+    const newSocket = io(API_URL || undefined, {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 20,
       reconnectionDelay: 1000,
