@@ -1,62 +1,94 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
+import { FALLBACK_TRAINS, FALLBACK_ALERTS, FALLBACK_NETWORK_STATS } from '../data/fallbackData';
 
 const SocketContext = createContext(null);
 
-// In production (Vercel) this must point at the Render backend, e.g.
-// https://railpulse-1.onrender.com — set VITE_API_URL in Vercel's
-// Environment Variables. Falls back to '' so local dev keeps using
-// the Vite proxy (see vite.config.js).
 const API_URL = import.meta.env.VITE_API_URL || '';
 
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
-  const [trains, setTrains] = useState(new Map());
-  const [simulatedTime, setSimulatedTime] = useState(null);
+  const [trains, setTrains] = useState(() => new Map(FALLBACK_TRAINS.map(t => [t.trainNumber, t])));
+  const [simulatedTime, setSimulatedTime] = useState(() => new Date().toISOString());
   const [recentEvents, setRecentEvents] = useState([]);
-  const [alerts, setAlerts] = useState([]);
-  const [networkStats, setNetworkStats] = useState({ delayHistory: [], alerts: [] });
+  const [alerts, setAlerts] = useState(FALLBACK_ALERTS);
+  const [networkStats, setNetworkStats] = useState(FALLBACK_NETWORK_STATS);
 
   useEffect(() => {
     let isMounted = true;
 
-    // Fast initial fetch to populate trains immediately without waiting for socket
+    // Fast initial fetch to populate trains from backend if reachable
     const loadInitialData = async () => {
       try {
-        const [trainsRes, statsRes] = await Promise.all([
-          fetch(`${API_URL}/api/trains`).then(r => r.json()),
-          fetch(`${API_URL}/api/network/stats`).then(r => r.json()).catch(() => ({}))
-        ]);
-        if (isMounted && Array.isArray(trainsRes) && trainsRes.length > 0) {
-          setTrains(new Map(trainsRes.map(t => [t.trainNumber, t])));
-        }
-        if (isMounted && statsRes) {
-          setNetworkStats(statsRes);
-          if (Array.isArray(statsRes.alerts)) {
-            setAlerts(statsRes.alerts);
+        const res = await fetch(`${API_URL}/api/trains`);
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          const trainsRes = await res.json();
+          if (isMounted && Array.isArray(trainsRes) && trainsRes.length > 0) {
+            setTrains(new Map(trainsRes.map(t => [t.trainNumber, t])));
           }
         }
       } catch (err) {
-        console.error('Initial trains fetch error:', err);
+        // Fallback already pre-loaded
+      }
+
+      try {
+        const statsRes = await fetch(`${API_URL}/api/network/stats`);
+        const contentType = statsRes.headers.get('content-type') || '';
+        if (statsRes.ok && contentType.includes('application/json')) {
+          const stats = await statsRes.json();
+          if (isMounted && stats) {
+            setNetworkStats(stats);
+            if (Array.isArray(stats.alerts)) {
+              setAlerts(stats.alerts);
+            }
+          }
+        }
+      } catch (err) {
+        // Fallback already pre-loaded
       }
     };
 
     loadInitialData();
 
-    // Connect to the Render backend in production (VITE_API_URL),
-    // or via the Vite proxy / relative host in local dev.
+    // Client-side simulation fallback when socket is disconnected (e.g. Vercel)
+    const fallbackInterval = setInterval(() => {
+      setSimulatedTime(new Date().toISOString());
+      setTrains((prev) => {
+        const next = new Map(prev);
+        for (const [num, train] of next.entries()) {
+          const run = train.currentRun || train;
+          const speed = Math.max(30, Math.min(115, Math.round((run.currentSpeed || 80) + (Math.random() * 6 - 3))));
+          const newKm = Math.min(run.totalKm || 500, (run.currentKm || 50) + 0.2);
+          next.set(num, {
+            ...train,
+            currentSpeed: speed,
+            currentKm: Math.round(newKm),
+            currentRun: {
+              ...run,
+              currentSpeed: speed,
+              currentKm: Math.round(newKm)
+            }
+          });
+        }
+        return next;
+      });
+    }, 1500);
+
+    // Connect to the backend in production (VITE_API_URL) or local dev
     const newSocket = io(API_URL || undefined, {
       transports: ['websocket', 'polling'],
-      reconnectionAttempts: 20,
-      reconnectionDelay: 1000,
-      timeout: 10000
+      reconnectionAttempts: 5,
+      reconnectionDelay: 2000,
+      timeout: 5000
     });
 
     setSocket(newSocket);
 
     newSocket.on('connect', () => {
       setConnected(true);
+      clearInterval(fallbackInterval);
     });
 
     newSocket.on('disconnect', () => {
