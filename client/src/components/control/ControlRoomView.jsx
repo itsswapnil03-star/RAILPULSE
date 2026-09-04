@@ -90,16 +90,31 @@ export default function ControlRoomView() {
       const run = (trains && trains.get(t.trainNumber)) || t.currentRun || t;
       const stationLog = run.stationLog || schedule;
 
+      const currentKm = Math.round(run.currentKm || t.currentKm || 0);
+      const totalKm = Math.round(run.totalKm || t.totalKm || (stationLog.length > 1 ? (stationLog[stationLog.length - 1].kmFromStart || stationLog.length * 45) : 455) || 455);
+
       if (stationLog && stationLog.length > 0) {
+        totalHalts = stationLog.length;
         const arrived = stationLog.filter(s => s.arrived);
         haltsCompleted = arrived.length;
-        if (arrived.length > 0) {
-          lastArrivedStation = arrived[arrived.length - 1];
+
+        // If arrived flags are not explicitly set, derive haltsCompleted from current physical km progress
+        if (haltsCompleted === 0 && currentKm > 0 && totalKm > 0 && totalHalts > 1) {
+          const ratio = Math.min(0.95, currentKm / totalKm);
+          haltsCompleted = Math.max(1, Math.floor(ratio * (totalHalts - 1)));
         }
 
-        const upcoming = stationLog.filter(s => !s.arrived);
+        if (arrived.length > 0) {
+          lastArrivedStation = arrived[arrived.length - 1];
+        } else if (haltsCompleted > 0) {
+          lastArrivedStation = stationLog[haltsCompleted - 1];
+        }
+
+        const upcoming = stationLog.filter((s, idx) => !s.arrived && idx >= haltsCompleted);
         if (upcoming.length > 0) {
           nextHalt = upcoming[0];
+        } else {
+          nextHalt = stationLog[Math.min(totalHalts - 1, haltsCompleted)];
         }
       }
 
@@ -129,8 +144,8 @@ export default function ControlRoomView() {
         lastArrivedStation,
         destinationStation,
         confidencePercent,
-        currentKm: Math.round(run.currentKm || t.currentKm || 0),
-        totalKm: Math.round(run.totalKm || t.totalKm || 100),
+        currentKm,
+        totalKm,
         currentSpeed: Math.round(run.currentSpeed || t.currentSpeed || (currentDelay > 5 ? 55 : 85))
       };
     });
@@ -458,11 +473,20 @@ export default function ControlRoomView() {
                         const runObj = selectedTrain.currentRun || selectedTrain;
                         const log = runObj.stationLog || selectedTrain.schedule || [];
                         const totalHalts = log.length;
-                        const nextIdx = runObj.nextStationIndex !== undefined ? runObj.nextStationIndex : log.findIndex(s => !s.arrived);
-                        const currentStationIdx = Math.min(totalHalts - 1, Math.max(0, nextIdx >= 0 ? nextIdx : 0));
                         
-                        // Exact percentage connecting to the current active station circle (where train is located)
-                        const linePct = totalHalts > 1 ? (currentStationIdx / (totalHalts - 1)) * 100 : 0;
+                        // Dynamically resolve active station index:
+                        let currentStationIdx = 0;
+                        if (runObj.nextStationIndex !== undefined && runObj.nextStationIndex > 0) {
+                          currentStationIdx = runObj.nextStationIndex;
+                        } else if (selectedTrain.haltsCompleted !== undefined && selectedTrain.haltsCompleted > 0) {
+                          currentStationIdx = Math.min(totalHalts - 1, selectedTrain.haltsCompleted);
+                        } else if (selectedTrain.currentKm > 0 && selectedTrain.totalKm > 0 && totalHalts > 1) {
+                          const ratio = Math.min(0.95, selectedTrain.currentKm / selectedTrain.totalKm);
+                          currentStationIdx = Math.max(1, Math.floor(ratio * (totalHalts - 1)));
+                        }
+
+                        const activeHaltIdx = Math.min(totalHalts - 1, Math.max(0, currentStationIdx));
+                        const linePct = totalHalts > 1 ? (activeHaltIdx / (totalHalts - 1)) * 100 : 0;
 
                         return (
                           <div className="min-w-[620px] py-4 px-2">
@@ -480,14 +504,14 @@ export default function ControlRoomView() {
 
                               {/* Station Nodes along the route */}
                               {log.map((st, sIdx) => {
-                                const isCovered = st.arrived || sIdx < nextIdx;
-                                const isCurrentNext = sIdx === nextIdx && !st.arrived;
+                                const isCovered = sIdx < activeHaltIdx || st.arrived;
+                                const isCurrentNext = sIdx === activeHaltIdx;
                                 const pred = predictions.find(p => p.stationCode === st.stationCode);
                                 const delay = isCovered ? (st.delayMinutes || 0) : (pred ? Math.round(pred.predictedDelayMinutes) : 0);
 
                                 return (
                                   <div key={st.stationCode} className="relative z-10 flex flex-col items-center group cursor-pointer">
-                                    {/* Station Marker */}
+                                    {/* Station Marker Badge */}
                                     {isCurrentNext && (
                                       <div className="absolute -top-7 bg-[#EF4444] text-white px-2 py-0.5 rounded font-mono text-[10px] font-bold animate-bounce shadow-md whitespace-nowrap">
                                         {selectedTrain.trainNumber}
@@ -495,13 +519,13 @@ export default function ControlRoomView() {
                                     )}
 
                                     <div className={`w-5 h-5 rounded-full flex items-center justify-center border-2 transition-all shadow-sm ${
-                                      isCovered
+                                      isCovered && !isCurrentNext
                                         ? 'bg-[#0ea5e9] border-white text-white'
                                         : isCurrentNext
                                         ? 'bg-white border-[#EF4444] ring-4 ring-[#EF4444]/20 animate-pulse'
                                         : 'bg-white border-[#E2E8F0] text-[#6e7881]'
                                     }`}>
-                                      {isCovered ? (
+                                      {isCovered && !isCurrentNext ? (
                                         <Check className="w-3 h-3 stroke-[3]" />
                                       ) : isCurrentNext ? (
                                         <div className="w-2 h-2 rounded-full bg-[#EF4444]" />
@@ -513,11 +537,11 @@ export default function ControlRoomView() {
                                     {/* Station Code */}
                                     <div className="mt-2 text-center font-mono">
                                       <div className={`text-xs font-bold ${
-                                        isCovered ? 'text-[#0ea5e9]' : isCurrentNext ? 'text-[#0F172A]' : 'text-[#6e7881]'
+                                        isCurrentNext ? 'text-[#EF4444]' : isCovered ? 'text-[#0ea5e9]' : 'text-[#6e7881]'
                                       }`}>
                                         {st.stationCode}
                                       </div>
-                                      <div className="text-[10px] text-[#505f76] truncate max-w-[65px]">
+                                      <div className="text-[10px] text-[#505f76] truncate max-w-[65px]" title={st.stationName}>
                                         {st.stationName}
                                       </div>
                                     </div>
