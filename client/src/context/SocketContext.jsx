@@ -97,7 +97,17 @@ export const SocketProvider = ({ children }) => {
 
     newSocket.on('trains:fleet', (fleetData) => {
       if (Array.isArray(fleetData) && fleetData.length > 0) {
-        setTrains(new Map(fleetData.map(t => [t.trainNumber, t])));
+        setTrains(new Map(fleetData.map(t => {
+          const run = t.currentRun || t;
+          return [t.trainNumber, {
+            ...t,
+            currentRun: run,
+            currentKm: run.currentKm !== undefined ? run.currentKm : t.currentKm,
+            currentSpeed: run.currentSpeed !== undefined ? run.currentSpeed : t.currentSpeed,
+            currentDelay: run.currentDelay !== undefined ? run.currentDelay : t.currentDelay,
+            status: run.status || t.status
+          }];
+        })));
       }
     });
 
@@ -106,9 +116,19 @@ export const SocketProvider = ({ children }) => {
         const newTrains = new Map(prevTrains);
         const existing = newTrains.get(data.trainNumber);
         if (existing) {
-          newTrains.set(data.trainNumber, { ...existing, currentRun: data });
+          newTrains.set(data.trainNumber, {
+            ...existing,
+            currentRun: data,
+            currentKm: data.currentKm !== undefined ? data.currentKm : existing.currentKm,
+            currentSpeed: data.currentSpeed !== undefined ? data.currentSpeed : existing.currentSpeed,
+            currentDelay: data.currentDelay !== undefined ? data.currentDelay : existing.currentDelay,
+            status: data.status || existing.status
+          });
         } else {
-          newTrains.set(data.trainNumber, data);
+          newTrains.set(data.trainNumber, {
+            ...data,
+            currentRun: data
+          });
         }
         return newTrains;
       });

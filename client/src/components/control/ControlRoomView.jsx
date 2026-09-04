@@ -82,23 +82,25 @@ export default function ControlRoomView() {
       let currentDelay = 0;
       let nextHalt = null;
       let haltsCompleted = 0;
-      const schedule = t.schedule || t.stationLog || [];
-      let totalHalts = schedule.length || 8;
-      let lastArrivedStation = null;
-      let destinationStation = schedule[schedule.length - 1] || null;
 
-      const run = (trains && trains.get(t.trainNumber)) || t.currentRun || t;
+      const trainObj = (trains && trains.get(t.trainNumber)) || t;
+      const run = trainObj.currentRun || trainObj;
+      const schedule = trainObj.schedule || run.stationLog || t.schedule || [];
       const stationLog = run.stationLog || schedule;
+      const totalHalts = stationLog.length || schedule.length || 8;
 
-      const currentKm = Math.round(run.currentKm || t.currentKm || 0);
-      const totalKm = Math.round(run.totalKm || t.totalKm || (stationLog.length > 1 ? (stationLog[stationLog.length - 1].kmFromStart || stationLog.length * 45) : 455) || 455);
+      const currentKm = Math.round(run.currentKm !== undefined ? run.currentKm : (trainObj.currentKm || 0));
+      const totalKm = Math.round(run.totalKm || trainObj.totalKm || t.totalKm || (stationLog.length > 1 ? (stationLog[stationLog.length - 1].kmFromStart || totalHalts * 45) : 455) || 455);
+      const currentSpeed = Math.round(run.currentSpeed !== undefined ? run.currentSpeed : (trainObj.currentSpeed || (currentDelay > 5 ? 55 : 85)));
+
+      let lastArrivedStation = null;
+      let destinationStation = stationLog[stationLog.length - 1] || null;
 
       if (stationLog && stationLog.length > 0) {
-        totalHalts = stationLog.length;
         const arrived = stationLog.filter(s => s.arrived);
         haltsCompleted = arrived.length;
 
-        // If arrived flags are not explicitly set, derive haltsCompleted from current physical km progress
+        // If arrived flags are not explicitly populated, derive haltsCompleted smoothly from current physical km progress
         if (haltsCompleted === 0 && currentKm > 0 && totalKm > 0 && totalHalts > 1) {
           const ratio = Math.min(0.95, currentKm / totalKm);
           haltsCompleted = Math.max(1, Math.floor(ratio * (totalHalts - 1)));
@@ -121,10 +123,12 @@ export default function ControlRoomView() {
       // Prioritize live socket run currentDelay immediately
       if (run.currentDelay !== undefined && run.currentDelay !== null && run.currentDelay !== 0) {
         currentDelay = run.currentDelay;
+      } else if (trainObj.currentDelay !== undefined && trainObj.currentDelay !== null && trainObj.currentDelay !== 0) {
+        currentDelay = trainObj.currentDelay;
       } else if (lastArrivedStation && lastArrivedStation.delayMinutes !== undefined && lastArrivedStation.delayMinutes !== null) {
         currentDelay = lastArrivedStation.delayMinutes;
       } else {
-        currentDelay = getTrainDelay(t, trains);
+        currentDelay = getTrainDelay(trainObj, trains);
       }
 
       // Incorporate optimistic instant injected delay
@@ -135,7 +139,7 @@ export default function ControlRoomView() {
       const confidencePercent = Math.max(75, Math.min(98, Math.round(96 - (currentDelay * 0.5))));
 
       return {
-        ...t,
+        ...trainObj,
         currentRun: run,
         currentDelay,
         haltsCompleted,
@@ -146,7 +150,7 @@ export default function ControlRoomView() {
         confidencePercent,
         currentKm,
         totalKm,
-        currentSpeed: Math.round(run.currentSpeed || t.currentSpeed || (currentDelay > 5 ? 55 : 85))
+        currentSpeed
       };
     });
   }, [trainsList, trains, injectedOverrides]);
