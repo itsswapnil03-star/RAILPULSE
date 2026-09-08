@@ -340,7 +340,8 @@ export function generatePanIndiaFleet(targetCount = 500) {
   });
 
   // 2. Procedurally Generate Remaining Trains up to 500
-  let trainNumCounter = 12200;
+  const usedTrainNumbers = new Set(fleet.map(f => String(f.trainNumber)));
+  let trainNumCounter = 13001;
   const prefixes = [
     'Superfast Express', 'Express', 'Mail', 'Intercity Express', 
     'Garib Rath', 'Humsafar Express', 'Jan Shatabdi', 'SF Special'
@@ -355,7 +356,13 @@ export function generatePanIndiaFleet(targetCount = 500) {
     
     const type = trainTypes[fleet.length % trainTypes.length];
     const prefix = prefixes[fleet.length % prefixes.length];
-    const trainNumber = String(trainNumCounter++);
+    
+    let trainNumber = String(trainNumCounter++);
+    while (usedTrainNumbers.has(trainNumber)) {
+      trainNumber = String(trainNumCounter++);
+    }
+    usedTrainNumbers.add(trainNumber);
+
     const name = `${originSt?.name.split(' ')[0]} – ${destSt?.name.split(' ')[0]} ${prefix}`;
     const baseSpeed = type === 'Vande Bharat' ? 115 : type === 'Rajdhani' ? 120 : type === 'Superfast' ? 85 : 70;
     const speed = Math.round(baseSpeed + (Math.random() * 16 - 8));

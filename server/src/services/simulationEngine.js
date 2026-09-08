@@ -52,14 +52,13 @@ class SimulationEngine {
       const trains = await Train.find({});
       const trainMap = new Map(trains.map(t => [t.trainNumber, t]));
 
-      for (const run of trainRuns) {
-        await this.updateTrainRun(run, trainMap.get(run.trainNumber));
-      }
+      // 500 train concurrent kinetic progression update
+      await Promise.all(trainRuns.map(run => this.updateTrainRun(run, trainMap.get(run.trainNumber))));
 
       const updatedRuns = await TrainRun.find({}).lean();
       const runMap = new Map(updatedRuns.map(r => [r.trainNumber, r]));
 
-      // 1. Run Conflict Detection & Decision Recommendations on each tick (Features 1 & 2)
+      // 1. Run Conflict Detection & Decision Recommendations on each tick
       this.activeAlerts = detectConflicts(updatedRuns, trainMap, 6);
 
       const fleet = trains.map(t => {
@@ -72,10 +71,6 @@ class SimulationEngine {
 
       // Emit continuous full fleet update every 1 second
       this.io.emit('trains:fleet', fleet);
-
-      for (const run of updatedRuns) {
-        this.io.emit('train:update', run);
-      }
 
       // Broadcast live conflict alerts feed
       this.io.emit('conflicts:alerts', this.activeAlerts);
@@ -195,8 +190,19 @@ class SimulationEngine {
           logEntry.actualArrival = new Date(simTime);
           logEntry.arrived = true;
           if (logEntry.scheduledArrival) {
-            const rawDelay = Math.round((simTime - logEntry.scheduledArrival) / 60000);
-            logEntry.delayMinutes = Math.max(0, Math.min(30, rawDelay));
+            let schedTime = logEntry.scheduledArrival;
+            if (typeof schedTime === 'string') {
+              const parts = schedTime.split(':').map(Number);
+              if (parts.length >= 2) {
+                const d = new Date(simTime);
+                d.setHours(parts[0], parts[1], parts[2] || 0, 0);
+                schedTime = d.getTime();
+              }
+            } else if (schedTime instanceof Date) {
+              schedTime = schedTime.getTime();
+            }
+            const rawDelay = (typeof schedTime === 'number' && !isNaN(schedTime)) ? Math.round((simTime - schedTime) / 60000) : 0;
+            logEntry.delayMinutes = isNaN(rawDelay) ? 0 : Math.max(0, Math.min(30, rawDelay));
           }
         }
         run.markModified('stationLog');

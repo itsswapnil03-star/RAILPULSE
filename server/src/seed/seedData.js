@@ -39,6 +39,7 @@ export async function seedDatabase(simulatedTime = null) {
       trainNumber: t.trainNumber,
       name: t.name,
       type: t.type,
+      zone: t.zone,
       originCode: t.originCode,
       destinationCode: t.destinationCode,
       totalKm: t.totalKm,
@@ -54,6 +55,8 @@ export async function seedDatabase(simulatedTime = null) {
     runsToInsert.push({
       trainNumber: t.trainNumber,
       trainName: t.name,
+      trainType: t.type,
+      zone: t.zone,
       runDate: today.toISOString().split('T')[0],
       status: t.status || 'running',
       currentKm: t.currentKm,
