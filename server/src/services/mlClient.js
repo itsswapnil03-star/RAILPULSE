@@ -1,19 +1,19 @@
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8008';
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://127.0.0.1:8009';
 
 export async function predictDelay(features) {
-  try {
-    const response = await fetch(`${ML_SERVICE_URL}/predict`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(features),
-      signal: AbortSignal.timeout(3000)
-    });
-    if (!response.ok) throw new Error(`ML service returned ${response.status}`);
-    return await response.json();
-  } catch (err) {
-    console.warn(`[ML Client] Prediction failed (${err.message}), using fallback`);
-    return fallbackPredict(features);
+  const urls = [ML_SERVICE_URL, 'http://127.0.0.1:8008', 'http://localhost:8009'];
+  for (const url of urls) {
+    try {
+      const response = await fetch(`${url}/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(features),
+        signal: AbortSignal.timeout(2000)
+      });
+      if (response.ok) return await response.json();
+    } catch (err) {}
   }
+  return fallbackPredict(features);
 }
 
 function fallbackPredict(features) {
