@@ -15,14 +15,14 @@ import { useSocket } from '../../context/SocketContext';
 import { triggerTestNotification } from '../../services/api';
 
 export default function EtaAlertToast() {
-  const socket = useSocket();
+  const { socket } = useSocket();
   const [activeAlert, setActiveAlert] = useState(null);
   const [selectedChannel, setSelectedChannel] = useState(null); // 'sms' | 'whatsapp' | null
   const [testSending, setTestSending] = useState(false);
   const [history, setHistory] = useState([]);
 
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || typeof socket.on !== 'function') return;
 
     const handleEtaAlert = (data) => {
       setActiveAlert(data);
