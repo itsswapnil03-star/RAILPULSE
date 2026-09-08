@@ -85,6 +85,17 @@ export default function FullGISMapView({ onSelectStation }) {
     { id: 'NCR', label: 'North Central (NCR)' },
   ];
 
+  const handleZoneChange = (zoneId) => {
+    setSelectedZone(zoneId);
+    let matching = trainsList;
+    if (zoneId !== 'all') {
+      matching = trainsList.filter(t => t.zone === zoneId || (t.zone && t.zone.includes(zoneId)));
+    }
+    if (matching.length > 0) {
+      setSelectedTrainNumber(matching[0].trainNumber);
+    }
+  };
+
   return (
     <div className="space-y-4 font-sans">
       
@@ -131,7 +142,7 @@ export default function FullGISMapView({ onSelectStation }) {
             return (
               <button
                 key={tab.id}
-                onClick={() => setSelectedZone(tab.id)}
+                onClick={() => handleZoneChange(tab.id)}
                 className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer border ${
                   isTabActive
                     ? 'bg-[#006591] text-white border-[#006591] shadow-sm'
@@ -241,9 +252,10 @@ export default function FullGISMapView({ onSelectStation }) {
         <div className="w-full h-full">
           <LiveGISMap 
             stations={stations}
-            trains={trainsList}
+            trains={filteredTrains.length > 0 ? filteredTrains : trainsList}
             selectedTrainNumber={selectedTrainNumber}
             onSelectTrain={(num) => setSelectedTrainNumber(num)}
+            showAllTrains={true}
             height="100%"
           />
         </div>

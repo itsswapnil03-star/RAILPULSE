@@ -98,13 +98,70 @@ const createTrainPhotoIcon = (train, speed = 0, isDelayed = false) => {
   });
 };
 
+// Station icon for general national network junctions
+const createGeneralStationIcon = () => {
+  return L.divIcon({
+    className: 'custom-general-station-icon',
+    html: `
+      <div style="
+        width: 7px; 
+        height: 7px; 
+        background-color: #ffffff; 
+        border: 2px solid #006591; 
+        border-radius: 50%; 
+        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      "></div>
+    `,
+    iconSize: [8, 8],
+    iconAnchor: [4, 4]
+  });
+};
+
+// Compact Train Marker for all other concurrent trains
+const createCompactTrainIcon = (train, speed = 0, isDelayed = false) => {
+  const statusColor = isDelayed ? '#EF4444' : '#10B981';
+
+  return L.divIcon({
+    className: 'custom-compact-train-icon',
+    html: `
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
+        <div style="
+          width: 12px; 
+          height: 12px; 
+          border-radius: 50%; 
+          background-color: ${statusColor}; 
+          border: 2px solid #ffffff; 
+          box-shadow: 0 0 6px ${statusColor};
+        "></div>
+        <div style="
+          margin-top: 1px; 
+          background-color: #0F172A; 
+          color: #ffffff; 
+          font-family: monospace; 
+          font-size: 9px; 
+          font-weight: bold; 
+          padding: 1px 4px; 
+          border-radius: 4px; 
+          box-shadow: 0 1px 4px rgba(0,0,0,0.4); 
+          white-space: nowrap; 
+          border: 1px solid ${statusColor};
+        ">
+          #${train?.trainNumber}
+        </div>
+      </div>
+    `,
+    iconSize: [38, 26],
+    iconAnchor: [19, 6]
+  });
+};
+
 function MapAutoBounds({ bounds, center }) {
   const map = useMap();
   useEffect(() => {
     if (bounds && bounds.length > 1) {
       map.fitBounds(bounds, { padding: [40, 40], maxZoom: 10, animate: true });
     } else if (center && center[0] && center[1]) {
-      map.setView(center, 8, { animate: true });
+      map.setView(center, 6, { animate: true });
     }
   }, [bounds, center, map]);
   return null;
@@ -116,6 +173,7 @@ export default function LiveGISMap({
   selectedTrainNumber = null, 
   onSelectTrain = () => {}, 
   onSelectStation = () => {},
+  showAllTrains = true,
   height = '360px'
 }) {
   const stationsMap = useMemo(() => {
@@ -131,7 +189,7 @@ export default function LiveGISMap({
     return trains[0] || null;
   }, [trains, selectedTrainNumber]);
 
-  // Get route stations and coordinates for THIS selected train ONLY
+  // Get route stations and coordinates for THIS selected train
   const routeData = useMemo(() => {
     if (!targetTrain) return { stationsOnRoute: [], coords: [], coveredCoords: [], remainingCoords: [], bounds: [] };
 
@@ -183,7 +241,32 @@ export default function LiveGISMap({
     };
   }, [targetTrain, stationsMap]);
 
-  // Interpolated live train position on its route
+  // Set of station codes on selected train's route
+  const routeStationCodes = useMemo(() => {
+    return new Set(routeData.stationsOnRoute.map(s => s.stationCode));
+  }, [routeData.stationsOnRoute]);
+
+  // Interpolated live train positions for the entire fleet across India
+  const fleetPositions = useMemo(() => {
+    if (!showAllTrains) return [];
+    // Limit to 200 trains simultaneously on the map for 60fps performance
+    return trains.slice(0, 200).map(t => {
+      const pos = interpolateTrainPosition(t, stationsMap);
+      const delay = getTrainDelay(t);
+      const run = t.currentRun || t;
+      const speed = Math.round(run.currentSpeed || (delay > 10 ? 65 : 110));
+      return {
+        ...t,
+        lat: pos[0],
+        lng: pos[1],
+        delay,
+        speed,
+        isTarget: t.trainNumber === targetTrain?.trainNumber
+      };
+    }).filter(t => t.lat && t.lng);
+  }, [trains, stationsMap, targetTrain, showAllTrains]);
+
+  // Interpolated live train position for selected train
   const liveTrainPos = useMemo(() => {
     if (!targetTrain) return [21.8, 78.9];
     return interpolateTrainPosition(targetTrain, stationsMap);
@@ -206,14 +289,14 @@ export default function LiveGISMap({
             <span className="font-mono text-[#006591]">#{targetTrain?.trainNumber}</span>
           </div>
           <div className="text-[11px] text-[#505f76] mt-0.5">
-            Route: <b>{targetTrain?.originCode || 'Origin'} → {targetTrain?.destinationCode || 'Destination'}</b> ({routeData.stationsOnRoute.length} Halts)
+            Route: <b>{targetTrain?.originCode || 'NDLS'} → {targetTrain?.destinationCode || 'HWH'}</b> ({routeData.stationsOnRoute.length} Halts) · Fleet: <b>{trains.length} Trains</b>
           </div>
         </div>
       </div>
 
       <MapContainer
-        center={liveTrainPos}
-        zoom={7}
+        center={liveTrainPos || [21.8, 78.9]}
+        zoom={6}
         style={{ width: '100%', height: '100%', backgroundColor: '#f7f9fb' }}
         zoomControl={true}
         attributionControl={false}
@@ -227,7 +310,30 @@ export default function LiveGISMap({
         {/* Auto fit map to this train's route */}
         <MapAutoBounds bounds={routeData.bounds} center={liveTrainPos} />
 
-        {/* 1. Covered Route Track Line (Solid Green / Blue) */}
+        {/* 1. Nationwide Railway Junction Nodes (Background Network) */}
+        {stations.map(st => {
+          if (routeStationCodes.has(st.code)) return null; // Rendered with higher priority below
+          if (!st.lat || !st.lng) return null;
+
+          return (
+            <Marker
+              key={`all-st-${st.code}`}
+              position={[st.lat, st.lng]}
+              icon={createGeneralStationIcon()}
+              eventHandlers={{
+                click: () => onSelectStation(st.code)
+              }}
+            >
+              <Tooltip direction="top" offset={[0, -6]} opacity={0.9}>
+                <div className="px-1.5 py-0.5 font-sans text-[10px] text-[#0F172A] bg-white rounded shadow-sm border border-[#E2E8F0]">
+                  <span className="font-bold text-[#006591]">{st.name}</span> ({st.code})
+                </div>
+              </Tooltip>
+            </Marker>
+          );
+        })}
+
+        {/* 2. Covered Route Track Line (Solid Green / Blue) */}
         {routeData.coveredCoords.length > 1 && (
           <Polyline
             positions={routeData.coveredCoords}
@@ -240,7 +346,7 @@ export default function LiveGISMap({
           />
         )}
 
-        {/* 2. Remaining Route Track Line (Dashed Navy Blue) */}
+        {/* 3. Remaining Route Track Line (Dashed Navy Blue) */}
         {routeData.remainingCoords.length > 1 && (
           <Polyline
             positions={routeData.remainingCoords}
@@ -254,10 +360,10 @@ export default function LiveGISMap({
           />
         )}
 
-        {/* 3. Render ONLY this train's scheduled station stops */}
+        {/* 4. Scheduled Stops on Selected Train's Route */}
         {routeData.stationsOnRoute.map(st => (
           <Marker
-            key={st.stationCode}
+            key={`route-st-${st.stationCode}`}
             position={[st.lat, st.lng]}
             icon={createRouteStationIcon(st.isCovered, st.isCurrent, st.isTerminus)}
             eventHandlers={{
@@ -275,10 +381,35 @@ export default function LiveGISMap({
           </Marker>
         ))}
 
-        {/* 4. Single Train Realistic Photo Marker */}
-        {targetTrain && (
+        {/* 5. Other Active Trains Across India (Compact Markers) */}
+        {fleetPositions.map(t => {
+          if (t.isTarget) return null; // Rendered with large photo badge below
+
+          return (
+            <Marker
+              key={`fleet-trn-${t.trainNumber}`}
+              position={[t.lat, t.lng]}
+              icon={createCompactTrainIcon(t, t.speed, t.delay > 10)}
+              eventHandlers={{
+                click: () => onSelectTrain(t.trainNumber)
+              }}
+            >
+              <Tooltip direction="top" offset={[0, -8]}>
+                <div className="px-2 py-1 font-sans text-xs text-[#0F172A] bg-white rounded shadow-sm border border-[#E2E8F0]">
+                  <div className="font-bold text-[#006591]">#{t.trainNumber} · {t.name}</div>
+                  <div className="text-[10px] text-[#505f76]">
+                    {t.originCode} → {t.destinationCode} | {t.speed} km/h | {t.delay > 0 ? `+${t.delay}m` : 'On Time'}
+                  </div>
+                </div>
+              </Tooltip>
+            </Marker>
+          );
+        })}
+
+        {/* 6. Selected Train Highlighted Realistic Photo Marker */}
+        {targetTrain && liveTrainPos && (
           <Marker
-            key={targetTrain.trainNumber}
+            key={`target-${targetTrain.trainNumber}`}
             position={liveTrainPos}
             icon={createTrainPhotoIcon(targetTrain, currentSpeed, isDelayed)}
             zIndexOffset={1000}
@@ -297,7 +428,7 @@ export default function LiveGISMap({
                   {targetTrain.name}
                 </div>
                 <div className="text-[11px] text-[#505f76] mt-1">
-                  Corridor: <b>{(targetTrain.originCode || 'CSMT')} → {(targetTrain.destinationCode || 'SUR')}</b>
+                  Corridor: <b>{(targetTrain.originCode || 'NDLS')} → {(targetTrain.destinationCode || 'HWH')}</b>
                 </div>
                 <div className="text-[11px] text-[#505f76]">
                   Speed: <b className="text-[#006591] font-mono">{currentSpeed} km/h</b>
