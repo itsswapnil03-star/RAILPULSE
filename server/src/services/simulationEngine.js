@@ -21,6 +21,8 @@ class SimulationEngine {
     this.delayHistory = [];
     this.recentEvents = [];
     this.activeAlerts = [];
+    this.notifications = [];
+    this.currentPreset = 'NORMAL';
   }
 
   async init(io) {
@@ -514,7 +516,114 @@ class SimulationEngine {
     }
 
     this.emitDelayEvent(run, event);
+
+    // If delay is significant (> 8m), automatically dispatch passenger notification
+    if (delayAdded >= 8) {
+      const train = await Train.findOne({ trainNumber });
+      this.dispatchEtaNotification(run, train, delayAdded, event.description);
+    }
+
     return { success: true, delayAdded, totalDelay: run.currentDelay };
+  }
+
+  dispatchEtaNotification(run, train, delayDelta, reason = 'Traffic regulation') {
+    const nextIdx = run.nextStationIndex || 1;
+    const targetLog = (run.stationLog && run.stationLog[nextIdx]) ? run.stationLog[nextIdx] : run.stationLog[run.stationLog.length - 1];
+    const stCode = targetLog?.stationCode || 'NEXT_STATION';
+    const stName = targetLog?.stationName || stCode;
+    
+    const schedStr = targetLog?.scheduledArrival || '12:00';
+    const parts = schedStr.split(':').map(Number);
+    const totalMin = (parts[0] || 12) * 60 + (parts[1] || 0) + (targetLog?.predictedDelayMinutes || run.currentDelay || delayDelta);
+    const newEta = `${String(Math.floor(totalMin / 60) % 24).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`;
+
+    const notif = {
+      id: `notif-${Date.now()}-${run.trainNumber}`,
+      trainNumber: run.trainNumber,
+      trainName: train?.name || run.trainName || `Train ${run.trainNumber}`,
+      stationCode: stCode,
+      stationName: stName,
+      driftMinutes: delayDelta,
+      newETA: newEta,
+      scheduledTime: schedStr,
+      reason: reason,
+      timestamp: new Date().toISOString(),
+      channels: {
+        sms: `[IR-ALERT] Train ${run.trainNumber} (${train?.name || ''}) delayed +${delayDelta}m. Revised ETA at ${stCode}: ${newEta}. Reason: ${reason}. - RailPulse AI`,
+        whatsapp: `🚆 *RailPulse Alert*\nTrain: *${train?.name || run.trainNumber}*\nRevised ETA at *${stName} (${stCode})*: *${newEta}* (+${delayDelta}m delay)\nReason: ${reason}`
+      }
+    };
+
+    this.notifications.unshift(notif);
+    if (this.notifications.length > 50) this.notifications.pop();
+
+    if (this.io) {
+      this.io.emit('notification:eta_alert', notif);
+      this.io.emit('notification:feed', this.notifications);
+    }
+    return notif;
+  }
+
+  getNotifications() {
+    return this.notifications;
+  }
+
+  async setScenarioPreset(presetName) {
+    const validPresets = ['NORMAL', 'MONSOON', 'WINTER_FOG', 'MEGABLOCK'];
+    const p = validPresets.includes(presetName) ? presetName : 'NORMAL';
+    this.currentPreset = p;
+
+    let targetWeather = 'clear';
+    let congestionBase = 0.25;
+    let delayMin = 0;
+    let desc = 'Normal clear sky operations';
+
+    if (p === 'MONSOON') {
+      targetWeather = 'heavy_rain';
+      congestionBase = 0.65;
+      delayMin = 14;
+      desc = 'Monsoon deluge & Ghat waterlogging caution active across Konkan & Central routes';
+    } else if (p === 'WINTER_FOG') {
+      targetWeather = 'fog';
+      congestionBase = 0.50;
+      delayMin = 18;
+      desc = 'Dense winter fog advisory: visibility < 100m, speed restrictions active';
+    } else if (p === 'MEGABLOCK') {
+      targetWeather = 'clear';
+      congestionBase = 0.85;
+      delayMin = 28;
+      desc = 'Sunday Mega Block: Interlocking modernization & track renewal between key junctions';
+    }
+
+    // Apply scenario parameters to active runs in bulk
+    const updatePayload = {
+      'weather.condition': targetWeather,
+      congestionLevel: congestionBase
+    };
+    if (p !== 'NORMAL') {
+      await TrainRun.updateMany({}, {
+        $set: updatePayload,
+        $inc: { currentDelay: Math.round(delayMin * 0.8) }
+      });
+    } else {
+      await TrainRun.updateMany({}, {
+        $set: updatePayload
+      });
+    }
+
+    apiCache.clear();
+
+    if (this.io) {
+      const allRuns = await TrainRun.find({}).lean();
+      this.io.emit('trains:fleet', allRuns);
+      this.io.emit('scenario:preset_applied', {
+        preset: p,
+        description: desc,
+        appliedAt: new Date().toISOString()
+      });
+    }
+
+    return { preset: p, description: desc, success: true };
   }
 
   async executeResolutionAction(actionData) {
@@ -565,6 +674,8 @@ class SimulationEngine {
     this.tickCount = 0;
     this.delayHistory = [];
     this.recentEvents = [];
+    this.notifications = [];
+    this.currentPreset = 'NORMAL';
     clearResolvedConflicts();
     const now = new Date();
     this.simulatedTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), SIM_START_HOUR, 0, 0);

@@ -1,0 +1,71 @@
+{
+  "model_name": "GradientBoostingRegressor (Tri-Quantile 0.05/0.50/0.95)",
+  "total_training_samples": 6720,
+  "total_test_samples": 1680,
+  "overall": {
+    "mae_minutes": 2.44,
+    "rmse_minutes": 3.71,
+    "r2_score": 0.9792,
+    "picp_90_coverage_percent": 92.56,
+    "nominal_target_coverage": 90.0,
+    "calibration_status": "Optimal (Well-Calibrated)"
+  },
+  "by_train_type": {
+    "Express": {
+      "samples": 308,
+      "mae": 2.83,
+      "rmse": 4.79,
+      "coverage_90": 89.9
+    },
+    "Intercity": {
+      "samples": 316,
+      "mae": 2.43,
+      "rmse": 3.82,
+      "coverage_90": 92.4
+    },
+    "Vande Bharat": {
+      "samples": 369,
+      "mae": 2.29,
+      "rmse": 3.05,
+      "coverage_90": 93.2
+    },
+    "Mail": {
+      "samples": 346,
+      "mae": 2.33,
+      "rmse": 3.29,
+      "coverage_90": 92.5
+    },
+    "Superfast": {
+      "samples": 341,
+      "mae": 2.35,
+      "rmse": 3.56,
+      "coverage_90": 94.4
+    }
+  },
+  "by_weather": {
+    "clear": {
+      "samples": 972,
+      "mae": 2.37,
+      "rmse": 3.76,
+      "coverage_90": 92.8
+    },
+    "fog": {
+      "samples": 130,
+      "mae": 3.01,
+      "rmse": 4.44,
+      "coverage_90": 83.1
+    },
+    "heavy_rain": {
+      "samples": 291,
+      "mae": 2.42,
+      "rmse": 3.33,
+      "coverage_90": 94.5
+    },
+    "rain": {
+      "samples": 287,
+      "mae": 2.4,
+      "rmse": 3.55,
+      "coverage_90": 94.1
+    }
+  }
+}

@@ -20,10 +20,13 @@ import {
   Legend,
   Cell
 } from 'recharts';
-import { injectSimulationEvent, resetSimulation, fetchPredictions, fetchCorridorTrend, generateTrain7DayTrend, executeResolutionAction, fetchStations } from '../../services/api';
+import { injectSimulationEvent, resetSimulation, fetchPredictions, fetchCorridorTrend, generateTrain7DayTrend, executeResolutionAction, fetchStations, triggerScenarioPreset } from '../../services/api';
 import { formatTime } from '../../utils/formatTime';
 import { getTrainDelay } from '../../utils/trainUtils';
 import LiveGISMap from '../map/LiveGISMap';
+import WhatIfPanel from './WhatIfPanel';
+import ModelCalibrationPanel from './ModelCalibrationPanel';
+import PlatformCrewPanel from './PlatformCrewPanel';
 
 const DELAY_REASONS_CATALOG = [
   { id: 'weather_fog', title: 'Dense Fog Visibility (<100m)', category: 'Weather', icon: CloudFog, color: 'text-[#6e7881]', desc: 'Automatic safety speed ceiling imposed due to reduced sighting distance.' },
@@ -401,11 +404,66 @@ export default function ControlRoomView() {
     }
   };
 
+  const [activeScenarioPreset, setActiveScenarioPreset] = useState('NORMAL');
+  const [presetFeedback, setPresetFeedback] = useState('');
+
+  const handleApplyPreset = async (presetKey) => {
+    setActiveScenarioPreset(presetKey);
+    try {
+      const res = await triggerScenarioPreset(presetKey);
+      setPresetFeedback(`✓ ${res.description || `${presetKey} scenario preset applied`}`);
+      setTimeout(() => setPresetFeedback(''), 4500);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const activeDelay = selectedTrain?.currentDelay || 0;
   const isDelayed = activeDelay > 5;
 
   return (
     <div className="space-y-6 font-sans">
+      {/* 0. SEASONAL & WEATHER SCENARIO PRESETS BAR */}
+      <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-[#0ea5e9]/10 text-[#006591] flex items-center justify-center font-bold">
+            🌤️
+          </div>
+          <div>
+            <h3 className="font-bold text-xs text-[#0F172A] uppercase tracking-wider">Operational Scenario Presets</h3>
+            <p className="text-[11px] text-[#505f76]">Dynamically adjust network-wide weather conditions, speed limits, and signal failure probabilities</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            { id: 'NORMAL', label: '☀️ Clear Ops (Normal)', color: 'border-emerald-200 hover:bg-emerald-50 text-emerald-800' },
+            { id: 'MONSOON', label: '🌧️ Monsoon Deluge (Ghat Caution)', color: 'border-cyan-200 hover:bg-cyan-50 text-cyan-800' },
+            { id: 'WINTER_FOG', label: '🌫️ Winter Fog (Visibility <100m)', color: 'border-slate-300 hover:bg-slate-100 text-slate-800' },
+            { id: 'MEGABLOCK', label: '🚧 Sunday Mega Block (Track Work)', color: 'border-rose-200 hover:bg-rose-50 text-rose-800' },
+          ].map(p => (
+            <button
+              key={p.id}
+              onClick={() => handleApplyPreset(p.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shadow-xs ${
+                activeScenarioPreset === p.id 
+                  ? 'bg-[#006591] text-white border-[#006591] shadow-sm ring-2 ring-[#006591]/20' 
+                  : `bg-white ${p.color}`
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        {presetFeedback && (
+          <div className="w-full mt-2 p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-900 animate-fadeIn flex items-center justify-between">
+            <span>{presetFeedback}</span>
+            <span className="text-[10px] text-emerald-700 font-mono">Simulated Fleet Synced</span>
+          </div>
+        )}
+      </div>
+
       {/* Search Header for Mobile */}
       <div className="flex md:hidden items-center bg-white rounded-lg px-3 py-2 border border-[#E2E8F0] shadow-sm">
         <Search className="w-4 h-4 text-[#505f76] mr-2" />
@@ -799,6 +857,20 @@ export default function ControlRoomView() {
               </div>
             </div>
           </div>
+
+          {/* 3. CASCADING DELAY WHAT-IF SCENARIO SANDBOX */}
+          {selectedTrain && (
+            <WhatIfPanel 
+              selectedTrain={selectedTrain} 
+              stations={stations} 
+            />
+          )}
+
+          {/* 4. AI MODEL PERFORMANCE & QUANTILE CALIBRATION */}
+          <ModelCalibrationPanel />
+
+          {/* 5. PLATFORM BERTH & CREW ROTA IMPACT MATRIX */}
+          <PlatformCrewPanel trains={enhancedTrains} />
 
         </div>
 

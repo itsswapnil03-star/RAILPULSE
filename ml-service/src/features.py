@@ -19,6 +19,9 @@ FEATURE_DESCRIPTIONS = {
     'congestion_level': lambda v: f"{'Low' if v < 0.3 else 'Medium' if v < 0.6 else 'High'} congestion ({v:.0%})",
     'stop_duration': lambda v: f"{int(v)} min stop",
     'num_remaining_stops': lambda v: f"{int(v)} stops remaining",
+    'block_section_occupancy': lambda v: f"{int(v)} trains occupying block section",
+    'preceding_train_delayed': lambda v: 'Preceding train delayed (>15 min)' if v else 'Clear ahead',
+    'trains_queued_in_section': lambda v: f"{int(v)} trains queued for signal",
     'weather_condition_fog': lambda v: 'Foggy conditions' if v else 'No fog',
     'weather_condition_heavy_rain': lambda v: 'Heavy rain' if v else 'No heavy rain',
     'weather_condition_rain': lambda v: 'Rainy conditions' if v else 'No rain',
@@ -33,6 +36,9 @@ FEATURE_DESCRIPTIONS = {
 FEATURE_NAMES = {
     'cumulative_delay_so_far': 'Cumulative Delay',
     'previous_station_delay': 'Previous Station Delay',
+    'block_section_occupancy': 'Block Section Occupancy',
+    'preceding_train_delayed': 'Preceding Train Delay',
+    'trains_queued_in_section': 'Trains Queued for Signal',
     'weather_condition_heavy_rain': 'Heavy Rain',
     'weather_condition_rain': 'Rain',
     'weather_condition_fog': 'Fog',
@@ -66,6 +72,9 @@ def prepare_features(raw: dict, feature_columns: list) -> pd.DataFrame:
         'congestion_level': raw.get('congestion_level', 0.3),
         'stop_duration': raw.get('stop_duration', 5),
         'num_remaining_stops': raw.get('num_remaining_stops', 4),
+        'block_section_occupancy': raw.get('block_section_occupancy', 1),
+        'preceding_train_delayed': int(raw.get('preceding_train_delayed', 0)),
+        'trains_queued_in_section': raw.get('trains_queued_in_section', 0),
     }
     # One-hot encode weather
     weather = raw.get('weather_condition', 'clear')
@@ -130,6 +139,9 @@ def _get_raw_value(raw: dict, feat_name: str):
         'day_of_week': 'day_of_week',
         'stop_duration': 'stop_duration',
         'num_remaining_stops': 'num_remaining_stops',
+        'block_section_occupancy': 'block_section_occupancy',
+        'preceding_train_delayed': 'preceding_train_delayed',
+        'trains_queued_in_section': 'trains_queued_in_section',
     }
     if feat_name in direct_map:
         return raw.get(direct_map[feat_name], 0)

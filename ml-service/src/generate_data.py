@@ -107,6 +107,11 @@ def generate_data():
                     km_from_origin = abs(st['km'] - origin_km)
                     scheduled_arrival_hour = int((base_hour + km_from_origin / 80.0) % 24)
                     
+                    # Network state simulation
+                    block_section_occupancy = random.choices([0, 1, 2, 3, 4], weights=[0.25, 0.40, 0.20, 0.10, 0.05])[0]
+                    preceding_train_delayed = 1 if (random.random() < 0.22 or previous_delay > 15) else 0
+                    trains_queued_in_section = random.choices([0, 1, 2, 3], weights=[0.60, 0.25, 0.10, 0.05])[0] if block_section_occupancy >= 2 else 0
+
                     if station_index == 0:
                         actual_delay = np.random.gamma(shape=2, scale=4) if (random.random() < 0.18) else 0.0
                     else:
@@ -133,6 +138,14 @@ def generate_data():
                             
                         if congestion_level > 0.7:
                             actual_delay += np.random.uniform(2, 6)
+
+                        # Network throttling effects
+                        if preceding_train_delayed:
+                            actual_delay += np.random.uniform(3, 9)
+                        if block_section_occupancy >= 3:
+                            actual_delay += np.random.uniform(2, 7)
+                        if trains_queued_in_section > 0:
+                            actual_delay += trains_queued_in_section * np.random.uniform(1.5, 3.5)
                             
                     actual_delay = max(0.0, round(actual_delay, 1))
                     stop_duration = get_stop_duration(train_type, station_index, len(st_objs))
@@ -151,6 +164,9 @@ def generate_data():
                         'weather_condition': weather_condition,
                         'is_monsoon': is_monsoon,
                         'congestion_level': round(congestion_level if station_index > 0 else 0.0, 2),
+                        'block_section_occupancy': block_section_occupancy,
+                        'preceding_train_delayed': preceding_train_delayed,
+                        'trains_queued_in_section': trains_queued_in_section,
                         'cumulative_delay_minutes': round(cumulative_delay, 1),
                         'previous_station_delay': round(previous_delay, 1),
                         'stop_duration': stop_duration,

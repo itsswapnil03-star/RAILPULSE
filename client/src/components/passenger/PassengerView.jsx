@@ -20,6 +20,60 @@ import {
 } from 'lucide-react';
 
 import { getTrainDelay as getTrainDelayUtil, getDelayBadgeInfo } from '../../utils/trainUtils';
+import EtaAlertToast from '../common/EtaAlertToast';
+
+const TRANSLATIONS = {
+  en: {
+    title: 'Your Journey',
+    subtitle: 'Live tracking and ML predictions across Indian Railways',
+    liveUpdates: 'LIVE UPDATES ACTIVE',
+    searchPlaceholder: 'Search train (e.g. 22225, Solapur, Vande Bharat)...',
+    allCategory: 'All',
+    runningNow: 'Running Now',
+    vandeBharat: 'Vande Bharat',
+    superfast: 'Superfast & Intercity',
+    activeTrip: 'ACTIVE TRIP',
+    liveSpeed: 'Live Speed',
+    onTime: 'ON TIME',
+    delayed: 'DELAYED',
+    selectTrain: 'Select Train',
+    scrollHint: 'Scroll horizontally →',
+    telemetry: 'TELEMETRY & KINEMATICS',
+    kmh: 'KM/H',
+    complete: 'COMPLETE',
+    nextStation: 'NEXT STATION PREDICTION',
+    timetable: 'ML TIMETABLE',
+    departed: 'Departed',
+    eta: 'ETA',
+    mlPrediction: 'ML PREDICTION',
+    mins: 'MINS'
+  },
+  hi: {
+    title: 'आपकी रेल यात्रा',
+    subtitle: 'भारतीय रेल हेतु रियल-टाइम ट्रैकिंग एवं एआई आगमन पूर्वानुमान',
+    liveUpdates: 'लाइव अपडेट सक्रिय',
+    searchPlaceholder: 'गाड़ी खोजें (उदा. 22225, सोलापुर, वंदे भारत)...',
+    allCategory: 'सभी गाड़ियाँ',
+    runningNow: 'वर्तमान में गतिमान',
+    vandeBharat: 'वंदे भारत',
+    superfast: 'सुपरफास्ट एवं इंटरसिटी',
+    activeTrip: 'सक्रिय रेल सेवा',
+    liveSpeed: 'लाइव गति',
+    onTime: 'समय पर',
+    delayed: 'विलंब',
+    selectTrain: 'गाड़ी चुनें',
+    scrollHint: 'अन्य गाड़ियाँ देखें →',
+    telemetry: 'गति एवं रेल दूरमिति',
+    kmh: 'किमी/घंटा',
+    complete: 'पूर्ण',
+    nextStation: 'अगला स्टेशन आगमन पूर्वानुमान',
+    timetable: 'एआई समय-सारणी',
+    departed: 'प्रस्थान',
+    eta: 'अनुमानित आगमन',
+    mlPrediction: 'एआई पूर्वानुमान',
+    mins: 'मिनट'
+  }
+};
 
 export default function PassengerView() {
   const { trains, trainsList, simulatedTime } = useSocket();
@@ -30,7 +84,10 @@ export default function PassengerView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [language, setLanguage] = useState('en'); // 'en' | 'hi'
   const searchContainerRef = useRef(null);
+
+  const t = TRANSLATIONS[language];
 
   // Unified realistic delay resolver
   const getTrainDelay = (trainObj) => getTrainDelayUtil(trainObj, trains);
@@ -143,19 +200,41 @@ export default function PassengerView() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 font-sans">
+      {/* Floating Alert Notifications & SMS/WhatsApp Broadcast */}
+      <EtaAlertToast />
       
       {/* 1. Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-[#E2E8F0] pb-4 bg-transparent">
         <div>
-          <h1 className="text-3xl font-extrabold text-[#0F172A] tracking-tight">Your Journey</h1>
-          <p className="text-sm text-[#505f76] mt-1">Live tracking and ML predictions across Indian Railways</p>
+          <h1 className="text-3xl font-extrabold text-[#0F172A] tracking-tight">{t.title}</h1>
+          <p className="text-sm text-[#505f76] mt-1">{t.subtitle}</p>
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Language Toggle */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+            <button
+              onClick={() => setLanguage('en')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                language === 'en' ? 'bg-white text-[#006591] shadow-xs' : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              English
+            </button>
+            <button
+              onClick={() => setLanguage('hi')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                language === 'hi' ? 'bg-[#006591] text-white shadow-xs' : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              हिंदी (Hindi)
+            </button>
+          </div>
+
           <div className="flex items-center gap-2 bg-[#10B981]/10 border border-[#10B981]/30 px-3.5 py-1.5 rounded-full">
             <div className="w-2 h-2 rounded-full bg-[#10B981] pulse-dot" />
             <span className="font-mono text-xs font-bold text-[#10B981] uppercase tracking-wider">
-              LIVE UPDATES ACTIVE
+              {t.liveUpdates}
             </span>
           </div>
         </div>
@@ -170,7 +249,7 @@ export default function PassengerView() {
             <Search className="w-4 h-4 text-[#6e7881] absolute left-3 top-1/2 -translate-y-1/2" />
             <input 
               type="text"
-              placeholder="Search train (e.g. 112, 11008, Deccan, Solapur)..."
+              placeholder={t.searchPlaceholder}
               value={searchQuery}
               onFocus={() => setShowSuggestions(true)}
               onChange={(e) => {
@@ -199,20 +278,20 @@ export default function PassengerView() {
                   <span className="text-[#0ea5e9] font-normal">Click to view journey</span>
                 </div>
 
-                {suggestions.map(t => {
-                  const isCur = t.trainNumber === (activeTrain?.trainNumber || selectedTrainNumber);
-                  const delayVal = getTrainDelay(t);
+                {suggestions.map(tItem => {
+                  const isCur = tItem.trainNumber === (activeTrain?.trainNumber || selectedTrainNumber);
+                  const delayVal = getTrainDelay(tItem);
                   const isHeavy = delayVal > 10;
                   const isMinor = delayVal > 0 && delayVal <= 10;
-                  const runObj = trains.get(t.trainNumber) || t.currentRun;
+                  const runObj = trains.get(tItem.trainNumber) || tItem.currentRun;
                   const speed = Math.round(runObj?.currentSpeed || (delayVal > 10 ? 60 : 105));
 
                   return (
                     <div
-                      key={t.trainNumber}
+                      key={tItem.trainNumber}
                       onClick={() => {
-                        handleSelectTrain(t.trainNumber);
-                        setSearchQuery(t.trainNumber);
+                        handleSelectTrain(tItem.trainNumber);
+                        setSearchQuery(tItem.trainNumber);
                         setShowSuggestions(false);
                       }}
                       className={`px-4 py-3 flex items-center justify-between hover:bg-[#f2f4f6] transition-colors cursor-pointer ${
@@ -221,12 +300,12 @@ export default function PassengerView() {
                     >
                       <div className="flex items-center gap-3">
                         <span className="px-2.5 py-1 rounded bg-[#0ea5e9]/10 text-[#006591] font-mono text-xs font-bold border border-[#0ea5e9]/20">
-                          #{t.trainNumber}
+                          #{tItem.trainNumber}
                         </span>
                         <div>
-                          <div className="text-xs font-bold text-[#0F172A]">{t.name}</div>
+                          <div className="text-xs font-bold text-[#0F172A]">{tItem.name}</div>
                           <div className="text-[11px] text-[#505f76]">
-                            {t.originCode || 'CSMT'} → {t.destinationCode || 'SUR'}
+                            {tItem.originCode || 'CSMT'} → {tItem.destinationCode || 'SUR'}
                           </div>
                         </div>
                       </div>
@@ -239,10 +318,10 @@ export default function PassengerView() {
                             ? 'bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/20' 
                             : 'bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/20'
                         }`}>
-                          {delayVal > 0 ? `+${delayVal}m` : 'ON TIME'}
+                          {delayVal > 0 ? `+${delayVal}m` : (language === 'hi' ? 'समय पर' : 'ON TIME')}
                         </span>
                         <div className="text-[10px] text-[#505f76] mt-0.5">
-                          {speed > 0 ? `${speed} km/h` : 'At Station'}
+                          {speed > 0 ? `${speed} km/h` : (language === 'hi' ? 'स्टेशन पर' : 'At Station')}
                         </div>
                       </div>
                     </div>
@@ -255,10 +334,10 @@ export default function PassengerView() {
           {/* Category Filter Pills */}
           <div className="flex flex-wrap gap-1.5">
             {[
-              { id: 'all', label: `All (${trainsList.length})` },
-              { id: 'running', label: 'Running Now' },
-              { id: 'vande_bharat', label: 'Vande Bharat' },
-              { id: 'superfast', label: 'Superfast & Intercity' }
+              { id: 'all', label: `${t.allCategory} (${trainsList.length})` },
+              { id: 'running', label: t.runningNow },
+              { id: 'vande_bharat', label: t.vandeBharat },
+              { id: 'superfast', label: t.superfast }
             ].map(cat => (
               <button
                 key={cat.id}
