@@ -155,15 +155,28 @@ const createCompactTrainIcon = (train, speed = 0, isDelayed = false) => {
   });
 };
 
-function MapAutoBounds({ bounds, center }) {
+function MapAutoBounds({ bounds, center, trainKey, recenterTrigger }) {
   const map = useMap();
+  const lastKeyRef = React.useRef(null);
+  const lastTriggerRef = React.useRef(0);
+
   useEffect(() => {
-    if (bounds && bounds.length > 1) {
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 10, animate: true });
-    } else if (center && center[0] && center[1]) {
-      map.setView(center, 6, { animate: true });
+    const isNewTrain = Boolean(trainKey && lastKeyRef.current !== trainKey);
+    const isManualTrigger = Boolean(recenterTrigger && recenterTrigger !== lastTriggerRef.current);
+    const isInitialMount = !lastKeyRef.current && Boolean(trainKey || (bounds && bounds.length > 1));
+
+    if (isNewTrain || isManualTrigger || isInitialMount) {
+      lastKeyRef.current = trainKey;
+      lastTriggerRef.current = recenterTrigger;
+
+      if (bounds && bounds.length > 1) {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 10, animate: true });
+      } else if (center && center[0] && center[1]) {
+        map.setView(center, 7, { animate: true });
+      }
     }
-  }, [bounds, center, map]);
+  }, [trainKey, recenterTrigger, bounds, center, map]);
+
   return null;
 }
 
@@ -177,6 +190,7 @@ export default function LiveGISMap({
   height = '360px'
 }) {
   const [isFleetVisible, setIsFleetVisible] = React.useState(showAllTrains);
+  const [recenterCount, setRecenterCount] = React.useState(0);
 
   const stationsMap = useMemo(() => {
     return new Map(stations.map(s => [s.code, s]));
@@ -299,6 +313,13 @@ export default function LiveGISMap({
       {/* Top Right Floating View Mode Switcher */}
       <div className="absolute top-3 right-3 z-[1000] bg-white/95 backdrop-blur-md p-1 rounded-xl border border-[#E2E8F0] flex items-center gap-1 shadow-md text-xs font-sans">
         <button
+          onClick={() => setRecenterCount(c => c + 1)}
+          className="px-2.5 py-1 rounded-lg font-bold text-xs text-[#006591] hover:bg-[#006591]/10 transition-all cursor-pointer flex items-center gap-1 border border-[#006591]/20"
+          title="Recenter and fit route in view"
+        >
+          <span>🎯</span> Focus Route
+        </button>
+        <button
           onClick={() => setIsFleetVisible(false)}
           className={`px-3 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
             !isFleetVisible
@@ -307,7 +328,7 @@ export default function LiveGISMap({
           }`}
           title="Show only the selected train and its scheduled halts"
         >
-          <span>🎯</span> Selected Train
+          Selected Train
         </button>
         <button
           onClick={() => setIsFleetVisible(true)}
@@ -318,7 +339,7 @@ export default function LiveGISMap({
           }`}
           title="Show all concurrent trains across India"
         >
-          <span>🌐</span> All Fleet ({trains.length})
+          <span>🌐</span> Fleet ({trains.length})
         </button>
       </div>
 
@@ -335,8 +356,13 @@ export default function LiveGISMap({
           maxZoom={18}
         />
 
-        {/* Auto fit map to this train's route */}
-        <MapAutoBounds bounds={routeData.bounds} center={liveTrainPos} />
+        {/* Auto fit map to this train's route ONLY when train changes or user clicks Focus */}
+        <MapAutoBounds 
+          bounds={routeData.bounds} 
+          center={liveTrainPos} 
+          trainKey={targetTrain?.trainNumber}
+          recenterTrigger={recenterCount}
+        />
 
         {/* 1. Nationwide Railway Junction Nodes (Only shown when Fleet mode is toggled) */}
         {isFleetVisible && stations.map(st => {

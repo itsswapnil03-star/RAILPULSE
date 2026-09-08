@@ -58,14 +58,19 @@ const createDemoTrainPinIcon = () => {
 };
 
 // Auto-Bounds Map Updater
-function RouteMapBounds({ routeCoords }) {
+function RouteMapBounds({ routeCoords, trainKey }) {
   const map = useMap();
+  const lastKeyRef = useRef(null);
+
   useEffect(() => {
-    if (routeCoords && routeCoords.length > 1) {
-      const bounds = L.latLngBounds(routeCoords);
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 10 });
+    if (trainKey && lastKeyRef.current !== trainKey) {
+      lastKeyRef.current = trainKey;
+      if (routeCoords && routeCoords.length > 1) {
+        const bounds = L.latLngBounds(routeCoords);
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 10, animate: true });
+      }
     }
-  }, [routeCoords, map]);
+  }, [routeCoords, trainKey, map]);
   return null;
 }
 
@@ -278,7 +283,7 @@ export default function RouteMapDemoView() {
             />
 
             {/* Auto Fit Route Bounds */}
-            {routeCoords.length > 1 && <RouteMapBounds routeCoords={routeCoords} />}
+            {routeCoords.length > 1 && <RouteMapBounds routeCoords={routeCoords} trainKey={selectedTrainNumber} />}
 
             {/* Polyline Route Track */}
             {routeCoords.length > 1 && (
