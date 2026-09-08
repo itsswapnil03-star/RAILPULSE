@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
 
-export default function StationBoardView({ initialStationCode = 'NDLS' }) {
+export default function StationBoardView({ initialStationCode = 'NDLS', onSelectStation }) {
   const { simulatedTime, alerts, trainsList } = useSocket();
   const [stationCode, setStationCode] = useState(initialStationCode);
   const [stations, setStations] = useState([]);
@@ -28,6 +28,13 @@ export default function StationBoardView({ initialStationCode = 'NDLS' }) {
   const [conflictDismissed, setConflictDismissed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [serviceFilter, setServiceFilter] = useState('all'); // 'all' | 'arrivals' | 'departures'
+
+  const handleStationChange = (newCode) => {
+    setStationCode(newCode);
+    if (onSelectStation) {
+      onSelectStation(newCode);
+    }
+  };
 
   // Load all stations for switcher
   useEffect(() => {
@@ -48,7 +55,7 @@ export default function StationBoardView({ initialStationCode = 'NDLS' }) {
 
   // Update if initial prop changes
   useEffect(() => {
-    if (initialStationCode) {
+    if (initialStationCode && initialStationCode !== stationCode) {
       setStationCode(initialStationCode);
     }
   }, [initialStationCode]);
@@ -95,121 +102,70 @@ export default function StationBoardView({ initialStationCode = 'NDLS' }) {
     };
   }, [stations, stationCode]);
 
-  // Generate clean, realistic, non-noisy train board rows
+  // Generate clean, realistic train board rows strictly for THIS station
   const cleanTrainRows = useMemo(() => {
-    const raw = boardData?.arrivals || boardData?.trains || [];
-    
-    // If backend returns real trains, map them cleanly; otherwise use curated realistic Maharashtra timetable
     let list = [];
 
-    if (trainsList && trainsList.length > 0) {
-      list = trainsList.map((t, idx) => {
+    // 1. Prioritize backend real-time arrival board for this exact station
+    if (boardData && Array.isArray(boardData.arrivals) && boardData.arrivals.length > 0) {
+      list = boardData.arrivals.map((arr, idx) => {
+        const isArrival = arr.to === currentStation.name || arr.to === stationCode || (idx % 2 === 0);
+        return {
+          trainNumber: arr.trainNumber,
+          name: arr.trainName,
+          originCode: arr.from,
+          destinationCode: arr.to,
+          isArrival,
+          platform: String(arr.platform || ((parseInt(String(arr.trainNumber).slice(-1), 10) || 1) % 6) + 1),
+          scheduledFormatted: formatTime(arr.scheduledArrival),
+          predictedFormatted: formatTime(arr.expectedArrival),
+          delayMinutes: arr.delayMinutes || 0,
+          status: arr.status || 'ON TIME',
+          drift: (arr.delayMinutes || 0) > 5 ? 'up' : (arr.delayMinutes || 0) > 0 ? 'down' : 'none'
+        };
+      });
+    } else if (trainsList && trainsList.length > 0) {
+      // 2. Client-side fallback: ONLY select trains that actually stop at this stationCode
+      const matchingTrains = trainsList.filter(t => {
         const run = t.currentRun || t;
         const log = run.stationLog || t.schedule || [];
-        const halt = log.find(s => s.stationCode === stationCode) || log[Math.min(idx, log.length - 1)];
-        const delay = halt?.delayMinutes !== undefined ? halt.delayMinutes : (t.currentDelay || (idx % 3 === 1 ? 14 : idx % 2 === 1 ? 4 : 0));
-        
-        let sched = halt?.scheduledArrival || halt?.scheduledDeparture;
-        let eta = halt?.actualArrival;
-        
-        // Generate realistic formatted time based on simulated clock if not provided
-        const baseTime = simulatedTime ? new Date(simulatedTime) : new Date();
-        const schedTime = new Date(baseTime.getTime() + (idx * 25 - 15) * 60000);
-        const etaTime = new Date(schedTime.getTime() + delay * 60000);
+        return log.some(s => s.stationCode === stationCode);
+      });
 
-        const isArrival = idx % 2 === 0;
-        const platform = (idx % 6) + 1;
+      list = matchingTrains.map((t, idx) => {
+        const run = t.currentRun || t;
+        const log = run.stationLog || t.schedule || [];
+        const halt = log.find(s => s.stationCode === stationCode);
+        const delay = halt?.delayMinutes !== undefined && halt?.delayMinutes !== null
+          ? halt.delayMinutes
+          : (t.currentDelay || 0);
+
+        const sched = halt?.scheduledArrival || halt?.scheduledDeparture;
+        const isArrival = t.destinationCode === stationCode || (idx % 2 === 0);
+        const platform = ((parseInt(String(t.trainNumber).slice(-1), 10) || 1) % 6) + 1;
+
+        const baseDate = simulatedTime ? new Date(simulatedTime) : new Date();
+        let scheduledDate = new Date(baseDate);
+        if (sched) {
+          const parts = String(sched).split(':').map(Number);
+          scheduledDate.setHours(parts[0] || 0, parts[1] || 0, parts[2] || 0, 0);
+        }
+        const expectedDate = new Date(scheduledDate.getTime() + delay * 60000);
 
         return {
           trainNumber: t.trainNumber,
           name: t.name,
-          originCode: t.originCode || 'CSMT',
-          destinationCode: t.destinationCode || 'SUR',
+          originCode: t.originCode || 'ORIGIN',
+          destinationCode: t.destinationCode || 'DEST',
           isArrival,
           platform: String(platform),
-          scheduledFormatted: formatTime(sched || schedTime),
-          predictedFormatted: formatTime(eta || etaTime),
+          scheduledFormatted: formatTime(sched || scheduledDate.toISOString()),
+          predictedFormatted: formatTime(expectedDate.toISOString()),
           delayMinutes: delay,
+          status: halt?.arrived && !halt?.departed ? 'ARRIVED' : delay > 5 ? 'DELAYED' : 'ON TIME',
           drift: delay > 5 ? 'up' : delay > 0 ? 'down' : 'none'
         };
       });
-    }
-
-    if (list.length === 0) {
-      list = [
-        {
-          trainNumber: '12124',
-          name: 'Deccan Queen Superfast',
-          originCode: 'CSMT',
-          destinationCode: 'PUNE',
-          isArrival: true,
-          platform: '1',
-          scheduledFormatted: '06:45 am',
-          predictedFormatted: '06:45 am',
-          delayMinutes: 0,
-          drift: 'none'
-        },
-        {
-          trainNumber: '22225',
-          name: 'Solapur Vande Bharat Express',
-          originCode: 'CSMT',
-          destinationCode: 'SUR',
-          isArrival: true,
-          platform: '2',
-          scheduledFormatted: '07:15 am',
-          predictedFormatted: '07:18 am',
-          delayMinutes: 3,
-          drift: 'up'
-        },
-        {
-          trainNumber: '11008',
-          name: 'Deccan Express',
-          originCode: 'PUNE',
-          destinationCode: 'CSMT',
-          isArrival: false,
-          platform: '3',
-          scheduledFormatted: '07:40 am',
-          predictedFormatted: '07:54 am',
-          delayMinutes: 14,
-          drift: 'up'
-        },
-        {
-          trainNumber: '22105',
-          name: 'Indrayani Superfast Express',
-          originCode: 'CSMT',
-          destinationCode: 'PUNE',
-          isArrival: true,
-          platform: '4',
-          scheduledFormatted: '08:10 am',
-          predictedFormatted: '08:10 am',
-          delayMinutes: 0,
-          drift: 'none'
-        },
-        {
-          trainNumber: '12128',
-          name: 'Pune Mumbai Intercity Express',
-          originCode: 'PUNE',
-          destinationCode: 'CSMT',
-          isArrival: false,
-          platform: '1',
-          scheduledFormatted: '08:35 am',
-          predictedFormatted: '08:37 am',
-          delayMinutes: 2,
-          drift: 'down'
-        },
-        {
-          trainNumber: '11322',
-          name: 'Manmad Nagpur Express',
-          originCode: 'CSMT',
-          destinationCode: 'NGP',
-          isArrival: true,
-          platform: '5',
-          scheduledFormatted: '09:00 am',
-          predictedFormatted: '09:18 am',
-          delayMinutes: 18,
-          drift: 'up'
-        }
-      ];
     }
 
     // Filter by Direction (All / Arrivals / Departures)
@@ -231,22 +187,32 @@ export default function StationBoardView({ initialStationCode = 'NDLS' }) {
     }
 
     return list;
-  }, [boardData, trainsList, stationCode, simulatedTime, serviceFilter, searchQuery]);
+  }, [boardData, trainsList, stationCode, simulatedTime, currentStation, serviceFilter, searchQuery]);
+
+  // Find if any live conflict is active specifically at this station
+  const activeConflict = useMemo(() => {
+    if (!alerts || alerts.length === 0) return null;
+    return alerts.find(a => 
+      a.stationCode === stationCode || 
+      (a.location && a.location.toUpperCase().includes(stationCode)) ||
+      (a.description && a.description.toUpperCase().includes(stationCode))
+    ) || null;
+  }, [alerts, stationCode]);
 
   return (
     <div className="space-y-6 font-sans">
       
-      {/* 1. Subtle, Professional Conflict Alert (Conditional) */}
-      {!conflictDismissed && (
+      {/* 1. Subtle, Professional Conflict Alert (Conditional when actual conflict is detected for this station) */}
+      {activeConflict && !conflictDismissed && (
         <div className="bg-white border-l-4 border-l-[#F59E0B] border border-[#E2E8F0] p-4 rounded-xl shadow-sm flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-[#F59E0B] shrink-0 mt-0.5" />
             <div>
               <h3 className="font-bold text-xs text-[#0F172A] tracking-tight">
-                Simultaneous Arrival Clearance Window • {currentStation.name}
+                Simultaneous Arrival Clearance Warning • {currentStation.name}
               </h3>
               <p className="text-xs text-[#505f76] mt-0.5 leading-relaxed">
-                Coaching services #12124 (Deccan Queen) and #11008 (Deccan Express) are predicted within a 5-min arrival buffer on Platform 1. Automatic precedence regulation recommended.
+                {activeConflict.message || `Potential platform occupancy conflict detected at ${currentStation.name}. Automated precedence recommendation active.`}
               </p>
             </div>
           </div>
@@ -274,7 +240,7 @@ export default function StationBoardView({ initialStationCode = 'NDLS' }) {
                 <div className="relative inline-flex items-center">
                   <select
                     value={stationCode}
-                    onChange={(e) => setStationCode(e.target.value)}
+                    onChange={(e) => handleStationChange(e.target.value)}
                     className="font-bold text-lg text-[#0F172A] tracking-tight bg-transparent border-b border-dashed border-[#0ea5e9] pr-6 outline-none cursor-pointer appearance-none hover:text-[#006591]"
                   >
                     {Object.keys(groupedStations).sort().map(zone => (
@@ -294,7 +260,7 @@ export default function StationBoardView({ initialStationCode = 'NDLS' }) {
                 </span>
               </div>
               <p className="text-xs text-[#505f76] mt-0.5">
-                Dynamic platform occupancy & ML arrival forecasts across 120+ junctions
+                Dynamic platform occupancy & ML arrival forecasts across 120+ junctions · Showing {cleanTrainRows.length} services
               </p>
             </div>
           </div>
@@ -359,7 +325,18 @@ export default function StationBoardView({ initialStationCode = 'NDLS' }) {
         </div>
 
         {/* Clean, Non-Noisy Table Rows */}
-        <div className="divide-y divide-[#E2E8F0] bg-white">
+        {cleanTrainRows.length === 0 ? (
+          <div className="py-16 text-center text-[#505f76] bg-white space-y-2">
+            <div className="text-3xl">🚉</div>
+            <div className="font-bold text-sm text-[#0F172A]">
+              No Active Services Calling at {currentStation.name} ({stationCode})
+            </div>
+            <p className="text-xs text-[#6e7881] max-w-md mx-auto">
+              There are currently no inbound or outbound coaching services scheduled at this station for the selected filter. Try selecting another major junction (e.g. NDLS, CSMT, PUNE, MAS, HWH).
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#E2E8F0] bg-white">
           {cleanTrainRows.map((row, idx) => {
             const isDelayed = row.delayMinutes > 5;
             const isWarning = row.delayMinutes > 0 && row.delayMinutes <= 5;
@@ -439,6 +416,7 @@ export default function StationBoardView({ initialStationCode = 'NDLS' }) {
             );
           })}
         </div>
+        )}
 
       </div>
 
