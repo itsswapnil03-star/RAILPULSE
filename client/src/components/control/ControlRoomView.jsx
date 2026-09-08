@@ -20,7 +20,7 @@ import {
   Legend,
   Cell
 } from 'recharts';
-import { injectSimulationEvent, resetSimulation, fetchPredictions, fetchCorridorTrend, executeResolutionAction, fetchStations } from '../../services/api';
+import { injectSimulationEvent, resetSimulation, fetchPredictions, fetchCorridorTrend, generateTrain7DayTrend, executeResolutionAction, fetchStations } from '../../services/api';
 import { formatTime } from '../../utils/formatTime';
 import { getTrainDelay } from '../../utils/trainUtils';
 import LiveGISMap from '../map/LiveGISMap';
@@ -306,33 +306,18 @@ export default function ControlRoomView() {
   useEffect(() => {
     if (!selectedTrain) return;
     const corridor = `${selectedTrain.originCode || 'CSMT'}-${selectedTrain.destinationCode || 'SUR'}`;
+    const trainNum = selectedTrain.trainNumber;
     async function loadTrend() {
       setLoadingTrend(true);
       try {
-        const res = await fetchCorridorTrend(corridor, 7);
-        if (res && Array.isArray(res.trendData)) {
-          setCorridorTrendData(res.trendData);
+        const trendList = await fetchCorridorTrend(corridor, 7, trainNum, selectedTrain);
+        if (Array.isArray(trendList) && trendList.length > 0) {
+          setCorridorTrendData(trendList);
         } else {
-          setCorridorTrendData([
-            { day: 'Mon', predictedDelay: 4, actualDelay: 4 },
-            { day: 'Tue', predictedDelay: 8, actualDelay: 7 },
-            { day: 'Wed', predictedDelay: 6, actualDelay: 6 },
-            { day: 'Thu', predictedDelay: 15, actualDelay: 14 },
-            { day: 'Fri', predictedDelay: 22, actualDelay: 21 },
-            { day: 'Sat', predictedDelay: 10, actualDelay: 9 },
-            { day: 'Sun', predictedDelay: 3, actualDelay: 3 }
-          ]);
+          setCorridorTrendData(generateTrain7DayTrend(selectedTrain));
         }
       } catch (e) {
-        setCorridorTrendData([
-          { day: 'Mon', predictedDelay: 4, actualDelay: 4 },
-          { day: 'Tue', predictedDelay: 8, actualDelay: 7 },
-          { day: 'Wed', predictedDelay: 6, actualDelay: 6 },
-          { day: 'Thu', predictedDelay: 15, actualDelay: 14 },
-          { day: 'Fri', predictedDelay: 22, actualDelay: 21 },
-          { day: 'Sat', predictedDelay: 10, actualDelay: 9 },
-          { day: 'Sun', predictedDelay: 3, actualDelay: 3 }
-        ]);
+        setCorridorTrendData(generateTrain7DayTrend(selectedTrain));
       } finally {
         setLoadingTrend(false);
       }

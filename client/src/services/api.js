@@ -81,18 +81,78 @@ export async function fetchNetworkStats() {
   return FALLBACK_NETWORK_STATS;
 }
  
-export async function fetchCorridorTrend(corridor = 'CSMT-SUR', days = 7) {
-  const data = await safeFetchJson(`${BASE}/api/analytics/corridor-trend?corridor=${encodeURIComponent(corridor)}&days=${days}`);
-  if (Array.isArray(data)) return data;
-  return [
-    { date: 'Day -6', avgDelay: 4.2 },
-    { date: 'Day -5', avgDelay: 5.1 },
-    { date: 'Day -4', avgDelay: 8.3 },
-    { date: 'Day -3', avgDelay: 6.0 },
-    { date: 'Day -2', avgDelay: 3.8 },
-    { date: 'Day -1', avgDelay: 5.4 },
-    { date: 'Today', avgDelay: 7.2 }
-  ];
+export function generateTrain7DayTrend(train) {
+  if (!train) train = { trainNumber: '12000', type: 'Express', currentDelay: 5 };
+  const trainNum = String(train.trainNumber || '12000');
+  const type = train.type || 
+               ((train.name || '').includes('Vande') ? 'Vande Bharat' :
+               (train.name || '').includes('Rajdhani') ? 'Rajdhani' :
+               (train.name || '').includes('Shatabdi') ? 'Shatabdi' :
+               (train.name || '').includes('Duronto') ? 'Duronto' :
+               (train.name || '').includes('Superfast') ? 'Superfast' :
+               (train.name || '').includes('Mail') ? 'Mail' : 'Express');
+  const curDelay = train.currentDelay !== undefined ? train.currentDelay : 0;
+
+  let seed = 0;
+  for (let i = 0; i < trainNum.length; i++) {
+    seed = (seed * 31 + trainNum.charCodeAt(i)) % 100000;
+  }
+
+  const baseDelay = type === 'Vande Bharat' ? 1.5 : 
+                    (type === 'Rajdhani' || type === 'Shatabdi') ? 3.5 :
+                    type === 'Duronto' ? 4.0 :
+                    type === 'Superfast' ? 7.5 :
+                    type === 'Mail' ? 14.0 : 12.0;
+
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const today = new Date();
+  const series = [];
+
+  for (let d = 6; d >= 0; d--) {
+    const targetDate = new Date(today);
+    targetDate.setDate(targetDate.getDate() - d);
+    const dayName = d === 0 ? 'Today' : days[targetDate.getDay()];
+    const dateLabel = targetDate.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+
+    // Day variance uniquely derived from train number seed + day offset
+    const dayNoise = (((seed * (d + 3) + 7919) % 19) - 9) * 0.4;
+    let pred = Math.max(0, Math.round((baseDelay + dayNoise) * 10) / 10);
+    
+    // For today, incorporate live actual delay
+    if (d === 0 && curDelay > 0) {
+      pred = Math.round(((pred + curDelay) / 2) * 10) / 10;
+    }
+
+    const actualNoise = (((seed * (d + 7) + 3571) % 11) - 5) * 0.3;
+    const act = Math.max(0, Math.round((pred + actualNoise) * 10) / 10);
+
+    series.push({
+      day: dayName,
+      date: dateLabel,
+      label: dateLabel,
+      predictedDelay: pred,
+      actualDelay: act,
+      delay: pred,
+      accuracy: Math.max(80, Math.min(99, Math.round(100 - Math.abs(pred - act) * 3))),
+      totalServices: 14 + ((seed + d) % 10)
+    });
+  }
+
+  return series;
+}
+
+export async function fetchCorridorTrend(corridor = 'CSMT-SUR', days = 7, trainNumber = null, trainObj = null) {
+  let url = `${BASE}/api/analytics/corridor-trend?corridor=${encodeURIComponent(corridor)}&days=${days}`;
+  if (trainNumber) url += `&trainNumber=${encodeURIComponent(trainNumber)}`;
+
+  const data = await safeFetchJson(url);
+  if (data && Array.isArray(data.trendData) && data.trendData.length > 0) {
+    return data.trendData;
+  }
+  if (data && Array.isArray(data) && data.length > 0) {
+    return data;
+  }
+  return generateTrain7DayTrend(trainObj || { trainNumber, originCode: corridor.split('-')[0], destinationCode: corridor.split('-')[1] });
 }
  
 export async function fetchSimulationStatus() {
