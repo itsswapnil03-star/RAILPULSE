@@ -129,9 +129,9 @@ export default function ControlRoomView() {
       }
 
       // Prioritize live socket run currentDelay immediately
-      if (run.currentDelay !== undefined && run.currentDelay !== null && run.currentDelay !== 0) {
+      if (run.currentDelay !== undefined && run.currentDelay !== null) {
         currentDelay = run.currentDelay;
-      } else if (trainObj.currentDelay !== undefined && trainObj.currentDelay !== null && trainObj.currentDelay !== 0) {
+      } else if (trainObj.currentDelay !== undefined && trainObj.currentDelay !== null) {
         currentDelay = trainObj.currentDelay;
       } else if (lastArrivedStation && lastArrivedStation.delayMinutes !== undefined && lastArrivedStation.delayMinutes !== null) {
         currentDelay = lastArrivedStation.delayMinutes;

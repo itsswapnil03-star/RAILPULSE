@@ -364,15 +364,15 @@ export default function PassengerView() {
           {/* Active Trip Card */}
           <div className="bg-white rounded-xl border border-[#E2E8F0] p-6 shadow-sm relative overflow-hidden group">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] font-bold text-[#505f76] tracking-wider uppercase">ACTIVE TRIP</span>
-              <span className="font-mono text-xs font-bold text-[#0ea5e9]">TRN-{activeTrain?.trainNumber || '12028'}</span>
+              <span className="text-[11px] font-bold text-[#505f76] tracking-wider uppercase">{t.activeTrip}</span>
+              <span className="font-mono text-xs font-bold text-[#0ea5e9]">TRN-{activeTrain?.trainNumber || '22225'}</span>
             </div>
 
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-xl font-bold text-[#0F172A]">{activeTrain?.name || 'Shatabdi Express'}</h2>
+                <h2 className="text-xl font-bold text-[#0F172A]">{activeTrain?.name || 'Solapur Vande Bharat Express'}</h2>
                 <div className="text-xs text-[#505f76] mt-0.5 font-medium">
-                  {activeTrain?.originCode || 'Mumbai CSMT'} → {activeTrain?.destinationCode || 'Pune Jn'} • Total: {totalKm} km
+                  {activeTrain?.originCode || 'CSMT'} → {activeTrain?.destinationCode || 'SUR'} • Total: {totalKm} km
                 </div>
               </div>
 
@@ -384,10 +384,10 @@ export default function PassengerView() {
                     ? 'bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/20' 
                     : 'bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/20'
                 }`}>
-                  {activeDelay > 0 ? `DELAYED +${activeDelay}m` : 'ON TIME'}
+                  {activeDelay > 0 ? `${t.delayed} +${activeDelay}m` : t.onTime}
                 </div>
                 <div className="text-xs text-[#505f76] mt-1 font-medium">
-                  Live Speed: {currentSpeed} km/h
+                  {t.liveSpeed}: {currentSpeed} {t.kmh}
                 </div>
               </div>
             </div>
@@ -395,21 +395,21 @@ export default function PassengerView() {
             {/* Horizontal Snap Quick-Select Carousel of Matching Trains */}
             <div className="pt-3 border-t border-[#E2E8F0]">
               <div className="text-[10px] font-bold text-[#505f76] uppercase tracking-wider mb-2 flex items-center justify-between">
-                <span>Select Train ({filteredTrainsList.length} Available)</span>
-                <span className="text-[#0ea5e9] text-[9px]">Scroll horizontally →</span>
+                <span>{t.selectTrain} ({filteredTrainsList.length})</span>
+                <span className="text-[#0ea5e9] text-[9px]">{t.scrollHint}</span>
               </div>
 
               <div className="flex gap-2.5 overflow-x-auto custom-scrollbar pb-2">
-                {filteredTrainsList.map(t => {
-                  const isCur = t.trainNumber === (activeTrain?.trainNumber || selectedTrainNumber);
-                  const delayVal = getTrainDelay(t);
+                {filteredTrainsList.map(tItem => {
+                  const isCur = tItem.trainNumber === (activeTrain?.trainNumber || selectedTrainNumber);
+                  const delayVal = getTrainDelay(tItem);
                   const isHeavy = delayVal > 10;
                   const isMinor = delayVal > 0 && delayVal <= 10;
 
                   return (
                     <button
-                      key={t.trainNumber}
-                      onClick={() => handleSelectTrain(t.trainNumber)}
+                      key={tItem.trainNumber}
+                      onClick={() => handleSelectTrain(tItem.trainNumber)}
                       className={`flex-none w-48 rounded-xl p-3 text-left transition-all cursor-pointer border ${
                         isCur
                           ? 'bg-[#d0e1fb]/40 border-[#0ea5e9] shadow-sm ring-2 ring-[#0ea5e9]/20'
@@ -418,25 +418,25 @@ export default function PassengerView() {
                     >
                       <div className="flex items-center justify-between mb-1">
                         <span className={`text-[10px] font-bold uppercase tracking-wider ${isCur ? 'text-[#006591]' : 'text-[#505f76]'}`}>
-                          {isCur ? 'SELECTED' : 'AVAILABLE'}
+                          {isCur ? (language === 'hi' ? 'चयनित' : 'SELECTED') : (language === 'hi' ? 'उपलब्ध' : 'AVAILABLE')}
                         </span>
                         <span className={`font-mono text-[10px] font-bold ${
                           isHeavy ? 'text-[#EF4444]' : isMinor ? 'text-[#F59E0B]' : 'text-[#10B981]'
                         }`}>
-                          {delayVal > 0 ? `+${delayVal}m` : 'ON TIME'}
+                          {delayVal > 0 ? `+${delayVal}m` : (language === 'hi' ? 'समय पर' : 'ON TIME')}
                         </span>
                       </div>
 
                       <div className="text-xs font-bold text-[#0F172A] truncate">
-                        {t.name}
+                        {tItem.name}
                       </div>
 
                       <div className="text-[11px] text-[#505f76] truncate mt-0.5 font-medium">
-                        {t.originCode || 'CSMT'} → {t.destinationCode || 'PUNE'}
+                        {tItem.originCode || 'CSMT'} → {tItem.destinationCode || 'SUR'}
                       </div>
 
                       <div className="font-mono text-[11px] text-[#006591] font-bold mt-1">
-                        #{t.trainNumber}
+                        #{tItem.trainNumber}
                       </div>
                     </button>
                   );
@@ -448,7 +448,7 @@ export default function PassengerView() {
           {/* Live Journey Tracker (Circular Speed Dial & Ring) */}
           <div className="bg-white border border-[#E2E8F0] shadow-sm rounded-xl p-6 flex flex-col items-center justify-center min-h-[300px] relative">
             <div className="absolute top-5 left-5 text-[11px] font-bold text-[#505f76] uppercase tracking-wider">
-              TELEMETRY & KINEMATICS
+              {t.telemetry}
             </div>
 
             {/* Circular Speed Dial */}
@@ -484,13 +484,13 @@ export default function PassengerView() {
                   {currentSpeed}
                 </span>
                 <span className="text-[10px] font-bold text-[#505f76] tracking-wider uppercase mt-0.5">
-                  KM/H
+                  {t.kmh}
                 </span>
                 <div className="w-8 h-[1px] bg-[#E2E8F0] my-1.5" />
                 <span className={`font-mono text-[11px] font-bold ${
                   isHeavyDelayed ? 'text-[#EF4444]' : isMinorDelayed ? 'text-[#F59E0B]' : 'text-[#10B981]'
                 }`}>
-                  {pctComplete}% COMPLETE
+                  {pctComplete}% {t.complete}
                 </span>
               </div>
             </div>
@@ -498,15 +498,17 @@ export default function PassengerView() {
             {/* Next Station Countdown Highlight Box */}
             <div className="mt-6 text-center bg-[#f7f9fb] border border-[#E2E8F0] px-6 py-4 rounded-xl w-full max-w-sm">
               <div className="text-[10px] font-bold text-[#505f76] tracking-wider uppercase mb-1">
-                NEXT STATION PREDICTION
+                {t.nextStation}
               </div>
               <div className="font-bold text-lg text-[#006591]">
-                {nextStop?.stationName || 'Pune Junction'}
+                {nextStop?.stationName || 'Daund Junction'}
               </div>
               <div className={`font-mono text-xl font-extrabold mt-0.5 ${
                 isHeavyDelayed ? 'text-[#EF4444]' : isMinorDelayed ? 'text-[#F59E0B]' : 'text-[#0ea5e9]'
               }`}>
-                {activeDelay > 0 ? `ETA +${activeDelay}m (${Math.max(2, Math.round(18 - (activeDelay * 0.4)))} MINS)` : 'ON TIME (14 MINS)'}
+                {activeDelay > 0 
+                  ? `${t.eta} +${activeDelay}m (${Math.max(2, Math.round(18 - (activeDelay * 0.4)))} ${t.mins})` 
+                  : `${t.onTime} (14 ${t.mins})`}
               </div>
             </div>
 
@@ -519,7 +521,7 @@ export default function PassengerView() {
           <div className="flex items-center justify-between mb-5 pb-3 border-b border-[#E2E8F0]">
             <div>
               <span className="text-[11px] font-bold text-[#505f76] uppercase tracking-wider block">
-                ML TIMETABLE • #{activeTrain?.trainNumber}
+                {t.timetable} • #{activeTrain?.trainNumber || '22225'}
               </span>
               <span className="text-xs font-bold text-[#0F172A]">
                 {activeTrain?.name}
@@ -555,7 +557,7 @@ export default function PassengerView() {
                       <div className={`text-[11px] font-semibold mt-0.5 ${
                         stopDelay > 5 ? 'text-[#EF4444]' : stopDelay > 0 ? 'text-[#F59E0B]' : 'text-[#10B981]'
                       }`}>
-                        Departed {stopDelay > 0 ? `+${stopDelay}m` : 'On Time'}
+                        {t.departed} {stopDelay > 0 ? `+${stopDelay}m` : (language === 'hi' ? 'समय पर' : 'On Time')}
                       </div>
                     </div>
                   </div>
@@ -595,7 +597,7 @@ export default function PassengerView() {
                         <span className={`text-[10px] font-bold uppercase ${
                           isHeavyDelayed ? 'text-[#EF4444]' : isMinorDelayed ? 'text-[#F59E0B]' : 'text-[#10B981]'
                         }`}>
-                          ETA
+                          {t.eta}
                         </span>
                         <span className="font-mono text-xs font-bold text-[#0F172A]">
                           {formatTime(nextStop.scheduledArrival || '19:42')}
@@ -608,8 +610,8 @@ export default function PassengerView() {
                       <Zap className="w-3 h-3 fill-current" />
                       <span>
                         {activeDelay > 0 
-                          ? `ML PREDICTION: ARRIVING +${activeDelay} MIN DELAYED` 
-                          : 'ML PREDICTION: ARRIVING ON TIME (0 MIN DELAY)'}
+                          ? `${t.mlPrediction}: ${language === 'hi' ? 'आगमन' : 'ARRIVING'} +${activeDelay} ${t.mins} ${t.delayed}` 
+                          : `${t.mlPrediction}: ${language === 'hi' ? 'आगमन समय पर' : 'ARRIVING ON TIME (0 MIN DELAY)'}`}
                       </span>
                     </div>
                   </div>

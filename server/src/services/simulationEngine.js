@@ -595,20 +595,44 @@ class SimulationEngine {
       desc = 'Sunday Mega Block: Interlocking modernization & track renewal between key junctions';
     }
 
-    // Apply scenario parameters to active runs in bulk
-    const updatePayload = {
-      'weather.condition': targetWeather,
-      congestionLevel: congestionBase
-    };
-    if (p !== 'NORMAL') {
-      await TrainRun.updateMany({}, {
-        $set: updatePayload,
-        $inc: { currentDelay: Math.round(delayMin * 0.8) }
-      });
-    } else {
-      await TrainRun.updateMany({}, {
-        $set: updatePayload
-      });
+    // Apply scenario parameters to active runs
+    const runs = await TrainRun.find({});
+    for (const run of runs) {
+      run.weather = { condition: targetWeather, temperature: 28 };
+      run.congestionLevel = congestionBase;
+
+      if (p === 'NORMAL') {
+        const num = parseInt(String(run.trainNumber).replace(/\D/g, '')) || 100;
+        const name = (run.trainName || '').toLowerCase();
+        const isPremium = name.includes('vande') || name.includes('rajdhani') || name.includes('shatabdi') || name.includes('duronto') || name.includes('tejas');
+        
+        let baseDelay = 0;
+        if (isPremium) {
+          baseDelay = (num % 5 === 0) ? 3 : 0;
+        } else {
+          const seed = (num * 13) % 10;
+          if (seed >= 8) baseDelay = 12 + (num % 10);
+          else if (seed >= 6) baseDelay = 4 + (num % 7);
+          else baseDelay = 0;
+        }
+        run.currentDelay = baseDelay;
+        run.activeDelayEvent = undefined;
+      } else {
+        const num = parseInt(String(run.trainNumber).replace(/\D/g, '')) || 100;
+        const extra = Math.round(delayMin * (0.6 + ((num % 5) * 0.15)));
+        run.currentDelay = Math.max(extra, (run.currentDelay || 0) + extra);
+      }
+
+      // Sync upcoming station logs
+      const startIdx = Math.max(0, run.nextStationIndex || 0);
+      if (run.stationLog && run.stationLog.length > 0) {
+        for (let i = startIdx; i < run.stationLog.length; i++) {
+          run.stationLog[i].predictedDelayMinutes = run.currentDelay;
+        }
+        run.markModified('stationLog');
+      }
+
+      await run.save();
     }
 
     apiCache.clear();
@@ -616,6 +640,7 @@ class SimulationEngine {
     if (this.io) {
       const allRuns = await TrainRun.find({}).lean();
       this.io.emit('trains:fleet', allRuns);
+      this.io.emit('network:stats', this.computeNetworkStats(allRuns));
       this.io.emit('scenario:preset_applied', {
         preset: p,
         description: desc,

@@ -8,8 +8,11 @@ export function getTrainDelay(trainObj, liveTrainsMap = null) {
                  trainObj.currentRun || 
                  trainObj;
 
-  if (runObj.currentDelay !== undefined && runObj.currentDelay !== null && runObj.currentDelay !== 0) {
+  if (runObj.currentDelay !== undefined && runObj.currentDelay !== null) {
     return runObj.currentDelay;
+  }
+  if (trainObj.currentDelay !== undefined && trainObj.currentDelay !== null) {
+    return trainObj.currentDelay;
   }
 
   // 2. Check station log arrived halts
@@ -22,16 +25,8 @@ export function getTrainDelay(trainObj, liveTrainsMap = null) {
     }
   }
 
-  // 3. Authentic realistic Indian Railways delay distribution if unstarted/in simulation
-  const num = parseInt(String(trainObj.trainNumber).replace(/\D/g, '')) || 100;
-  const isVB = (trainObj.name || '').toLowerCase().includes('vande');
-  if (isVB) {
-    return (num % 4 === 0) ? 3 : 0;
-  }
-  const seed = (num * 13) % 10;
-  if (seed >= 6) return 12 + (num % 16); // 12-28 min delay
-  if (seed >= 3) return 4 + (num % 7);   // 4-10 min delay
-  return 0; // On time
+  // 3. Fallback only if train has no delay metadata
+  return 0;
 }
 
 export function getDelayBadgeInfo(delayMinutes) {

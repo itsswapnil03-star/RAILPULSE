@@ -36,24 +36,38 @@ router.get('/:code/board', async (req, res) => {
     
     const allStations = await Station.find({}).lean();
     const stationCodeMap = new Map(allStations.map(s => [s.code, s.name]));
+    const baseDate = simulationEngine.simulatedTime ? new Date(simulationEngine.simulatedTime) : new Date();
 
     const arrivals = [];
     for (const run of runs) {
       const train = trainMap.get(run.trainNumber);
       if (!train) continue;
       
-      const logEntry = run.stationLog.find(s => s.stationCode === station.code);
+      const logEntry = (run.stationLog || []).find(s => s.stationCode === station.code);
       if (!logEntry || logEntry.departed) continue;
       
-      const scheduledArr = logEntry.scheduledArrival ? new Date(logEntry.scheduledArrival) : null;
-      const predictedDelay = logEntry.predictedDelayMinutes || 0;
-      const expectedArr = scheduledArr ? new Date(scheduledArr.getTime() + predictedDelay * 60000) : null;
+      // Parse scheduledArrival "HH:MM:SS" or "HH:MM"
+      let scheduledArr = null;
+      if (logEntry.scheduledArrival) {
+        scheduledArr = new Date(baseDate);
+        const parts = String(logEntry.scheduledArrival).split(':').map(Number);
+        scheduledArr.setHours(parts[0] || 0, parts[1] || 0, parts[2] || 0, 0);
+      }
       
-      let status = 'Expected';
-      if (logEntry.arrived && !logEntry.departed) status = 'At Platform';
-      else if (logEntry.arrived && logEntry.departed) status = 'Departed';
-      else if (predictedDelay > 5) status = 'Delayed';
-      else status = 'On Time';
+      const effectiveDelay = logEntry.arrived
+        ? (logEntry.delayMinutes !== undefined && logEntry.delayMinutes !== null ? logEntry.delayMinutes : (run.currentDelay || 0))
+        : (logEntry.predictedDelayMinutes !== undefined && logEntry.predictedDelayMinutes > 0
+            ? logEntry.predictedDelayMinutes
+            : (run.currentDelay !== undefined && run.currentDelay !== null ? run.currentDelay : 0));
+            
+      const expectedArr = scheduledArr ? new Date(scheduledArr.getTime() + effectiveDelay * 60000) : null;
+      
+      let status = 'ON TIME';
+      if (logEntry.arrived && !logEntry.departed) status = 'ARRIVED';
+      else if (logEntry.arrived && logEntry.departed) status = 'DEPARTED';
+      else if (effectiveDelay > 15) status = 'DELAYED';
+      else if (effectiveDelay > 5) status = 'DELAYED';
+      else status = 'ON TIME';
       
       arrivals.push({
         trainNumber: run.trainNumber,
@@ -63,7 +77,7 @@ router.get('/:code/board', async (req, res) => {
         to: stationCodeMap.get(train.destinationCode) || train.destinationCode,
         scheduledArrival: scheduledArr?.toISOString(),
         expectedArrival: expectedArr?.toISOString(),
-        delayMinutes: logEntry.arrived ? (logEntry.delayMinutes || 0) : predictedDelay,
+        delayMinutes: effectiveDelay,
         status,
         platform: ((parseInt(run.trainNumber.slice(-1), 10) || 1) % 6) + 1
       });
