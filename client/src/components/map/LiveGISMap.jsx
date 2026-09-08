@@ -180,6 +180,102 @@ function MapAutoBounds({ bounds, center, trainKey, recenterTrigger }) {
   return null;
 }
 
+// Rich Interactive Station Info Popup rendered directly on the GIS Map
+function StationMapPopup({ station, trains = [], onOpenBoard }) {
+  const code = station.stationCode || station.code;
+  const name = station.name || station.stationName || code;
+  const zone = station.zone || 'IR';
+  const state = station.state || '';
+
+  // Find trains calling at or arriving at this station
+  const arrivals = useMemo(() => {
+    if (!code || !trains) return [];
+    const list = [];
+    for (const t of trains) {
+      const run = t.currentRun || t;
+      const log = run.stationLog || t.schedule || [];
+      const entry = log.find(s => s.stationCode === code);
+      if (entry && !entry.departed) {
+        const delay = getTrainDelay(t);
+        list.push({
+          trainNumber: t.trainNumber,
+          trainName: t.name,
+          type: t.type,
+          delay,
+          scheduledArrival: entry.scheduledArrival || '12:00',
+          arrived: entry.arrived,
+          platform: ((parseInt(String(t.trainNumber).slice(-1), 10) || 1) % 6) + 1
+        });
+      }
+    }
+    return list.slice(0, 4);
+  }, [code, trains]);
+
+  return (
+    <div className="p-1 font-sans text-xs text-[#0F172A] min-w-[240px] max-w-[280px]">
+      <div className="flex items-start justify-between border-b border-[#E2E8F0] pb-2 mb-2">
+        <div>
+          <div className="font-bold text-sm text-[#006591] flex items-center gap-1.5">
+            <span>🏛️</span>
+            <span className="truncate max-w-[170px]">{name}</span>
+          </div>
+          <div className="text-[11px] text-[#505f76] mt-0.5">
+            Station Code: <b className="font-mono text-[#0F172A]">{code}</b> {zone ? `· ${zone}` : ''} {state ? `· ${state}` : ''}
+          </div>
+        </div>
+        <span className="px-2 py-0.5 rounded bg-[#0ea5e9]/10 text-[#006591] text-[10px] font-bold font-mono">
+          Station Hub
+        </span>
+      </div>
+
+      <div className="mb-2">
+        <div className="text-[10px] font-bold text-[#505f76] uppercase tracking-wider mb-1 flex justify-between">
+          <span>Upcoming Services</span>
+          <span className="text-[#006591] font-mono">{arrivals.length} Active</span>
+        </div>
+
+        {arrivals.length === 0 ? (
+          <div className="text-[11px] text-[#6e7881] py-1.5 px-2 bg-[#f7f9fb] rounded border border-[#E2E8F0] italic">
+            No imminent train arrivals at this time
+          </div>
+        ) : (
+          <div className="space-y-1 max-h-36 overflow-y-auto custom-scrollbar divide-y divide-[#E2E8F0]/60">
+            {arrivals.map(arr => (
+              <div key={arr.trainNumber} className="pt-1 flex items-center justify-between text-[11px]">
+                <div>
+                  <span className="font-mono font-bold text-[#006591]">#{arr.trainNumber}</span>
+                  <span className="text-[#505f76] ml-1.5 truncate max-w-[110px] inline-block align-bottom">{arr.trainName}</span>
+                </div>
+                <div className="text-right font-mono">
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                    arr.delay > 10 ? 'bg-[#EF4444]/10 text-[#EF4444]' : arr.delay > 0 ? 'bg-[#F59E0B]/10 text-[#F59E0B]' : 'bg-[#10B981]/10 text-[#10B981]'
+                  }`}>
+                    {arr.delay > 0 ? `+${arr.delay}m` : 'On Time'}
+                  </span>
+                  <span className="text-[10px] text-[#505f76] ml-1">PF {arr.platform}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {onOpenBoard && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenBoard(code);
+          }}
+          className="w-full mt-1.5 py-1.5 px-3 rounded-lg bg-[#006591] hover:bg-[#004e70] text-white font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+        >
+          <span>Open Full Station Board</span>
+          <span>→</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function LiveGISMap({ 
   stations = [], 
   trains = [], 
@@ -374,15 +470,15 @@ export default function LiveGISMap({
               key={`all-st-${st.code}`}
               position={[st.lat, st.lng]}
               icon={createGeneralStationIcon()}
-              eventHandlers={{
-                click: () => onSelectStation(st.code)
-              }}
             >
               <Tooltip direction="top" offset={[0, -6]} opacity={0.9}>
                 <div className="px-1.5 py-0.5 font-sans text-[10px] text-[#0F172A] bg-white rounded shadow-sm border border-[#E2E8F0]">
                   <span className="font-bold text-[#006591]">{st.name}</span> ({st.code})
                 </div>
               </Tooltip>
+              <Popup minWidth={250} maxWidth={290}>
+                <StationMapPopup station={st} trains={trains} onOpenBoard={onSelectStation} />
+              </Popup>
             </Marker>
           );
         })}
@@ -420,9 +516,6 @@ export default function LiveGISMap({
             key={`route-st-${st.stationCode}`}
             position={[st.lat, st.lng]}
             icon={createRouteStationIcon(st.isCovered, st.isCurrent, st.isTerminus)}
-            eventHandlers={{
-              click: () => onSelectStation(st.stationCode)
-            }}
           >
             <Tooltip direction="top" offset={[0, -10]} opacity={0.95} permanent={st.isTerminus || st.isCurrent}>
               <div className="px-2 py-1 font-sans text-xs text-[#0F172A] bg-white rounded shadow-sm border border-[#E2E8F0]">
@@ -432,6 +525,9 @@ export default function LiveGISMap({
                 </div>
               </div>
             </Tooltip>
+            <Popup minWidth={250} maxWidth={290}>
+              <StationMapPopup station={st} trains={trains} onOpenBoard={onSelectStation} />
+            </Popup>
           </Marker>
         ))}
 

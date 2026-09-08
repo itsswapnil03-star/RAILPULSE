@@ -33,7 +33,7 @@ export default function App() {
             <Route path="/control" element={<ControlRoomView />} />
             <Route path="/passenger" element={<PassengerView />} />
             <Route path="/stations" element={<StationBoardView initialStationCode={selectedStationCode} />} />
-            <Route path="/map" element={<FullGISMapView />} />
+            <Route path="/map" element={<FullGISMapView onSelectStation={handleSelectStation} />} />
             <Route path="*" element={<Navigate to="/control" replace />} />
           </Routes>
         </div>
