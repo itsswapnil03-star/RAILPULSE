@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  background-color: #070b16; /* Refined dark background */
+  font-family: "IBM Plex Sans", sans-serif;
+  color: #c5d0dc;
+}
+
+/* Enhanced container spacing */
+.app-container {
+  padding: 1rem;
+}
+
+/* Modern card style */
+.card {
+  background: rgba(12, 20, 36, 0.6);
+  border: 1px solid rgba(232, 163, 23, 0.1);
+  border-radius: 8px;
+  padding: 1rem;
+  backdrop-filter: blur(8px);
+}
+
+/* Refined typography & scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #1a2f52;
+  border-radius: 3px;
+}

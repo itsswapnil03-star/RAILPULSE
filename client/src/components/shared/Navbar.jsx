@@ -1,20 +1,51 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../../context/SocketContext';
 import { Bell, Clock, MapPin, ChevronDown } from 'lucide-react';
 import { formatTime } from '../../utils/formatTime';
+import { fetchStations } from '../../services/api';
+import { PAN_INDIA_STATIONS_FALLBACK } from '../../data/fallbackData';
 import NotificationsDropdown from '../modals/NotificationsDropdown';
 import SimClockModal from '../modals/SimClockModal';
 import ProfileModal from '../modals/ProfileModal';
 
-export default function Navbar({ selectedStationCode = 'PUNE', onSelectStation }) {
+export default function Navbar({ selectedStationCode = 'NDLS', onSelectStation }) {
   const { networkStats, alerts, simulatedTime, connected } = useSocket();
   const navigate = useNavigate();
 
+  const [stations, setStations] = useState([]);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isClockOpen, setIsClockOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [acknowledgedAlertIds, setAcknowledgedAlertIds] = useState(new Set());
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await fetchStations();
+        if (data && data.length > 0) {
+          setStations(data);
+        } else {
+          setStations(PAN_INDIA_STATIONS_FALLBACK);
+        }
+      } catch (e) {
+        setStations(PAN_INDIA_STATIONS_FALLBACK);
+      }
+    }
+    load();
+  }, []);
+
+  // Group stations by Zone for clean dropdown navigation
+  const groupedStations = useMemo(() => {
+    const list = stations.length > 0 ? stations : PAN_INDIA_STATIONS_FALLBACK;
+    const groups = {};
+    list.forEach(st => {
+      const zone = st.zone || 'Other';
+      if (!groups[zone]) groups[zone] = [];
+      groups[zone].push(st);
+    });
+    return groups;
+  }, [stations]);
 
   const punctuality = networkStats?.punctualityRate || 98.4;
   const rawAlerts = alerts || [];
@@ -61,13 +92,17 @@ export default function Navbar({ selectedStationCode = 'PUNE', onSelectStation }
           <select 
             value={selectedStationCode}
             onChange={handleStationChange}
-            className="bg-transparent text-[#006591] font-mono text-xs font-bold w-full outline-none appearance-none cursor-pointer border-none p-0 pr-4"
+            className="bg-transparent text-[#006591] font-mono text-xs font-bold w-full outline-none appearance-none cursor-pointer border-none p-0 pr-4 max-h-60"
           >
-            <option value="PUNE">Pune Junction (PUNE)</option>
-            <option value="CSMT">Mumbai CSMT (CSMT)</option>
-            <option value="SUR">Solapur Junction (SUR)</option>
-            <option value="NK">Nashik Road (NK)</option>
-            <option value="NGP">Nagpur Junction (NGP)</option>
+            {Object.keys(groupedStations).sort().map(zone => (
+              <optgroup key={zone} label={`Zone: ${zone}`}>
+                {groupedStations[zone].map(s => (
+                  <option key={s.code} value={s.code}>
+                    {s.name} ({s.code})
+                  </option>
+                ))}
+              </optgroup>
+            ))}
           </select>
           <ChevronDown className="w-4 h-4 text-[#6e7881] pointer-events-none absolute right-2.5" />
         </div>

@@ -185,7 +185,7 @@ export default function LiveGISMap({
 
   // Interpolated live train position on its route
   const liveTrainPos = useMemo(() => {
-    if (!targetTrain) return [19.25, 75.25];
+    if (!targetTrain) return [21.8, 78.9];
     return interpolateTrainPosition(targetTrain, stationsMap);
   }, [targetTrain, stationsMap]);
 

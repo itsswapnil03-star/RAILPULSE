@@ -24,6 +24,7 @@ export default function FullGISMapView({ onSelectStation }) {
   const [stations, setStations] = useState([]);
   const [selectedTrainNumber, setSelectedTrainNumber] = useState('22225');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedZone, setSelectedZone] = useState('all');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,21 +41,28 @@ export default function FullGISMapView({ onSelectStation }) {
     loadStations();
   }, []);
 
-  // Filtered train list for quick switcher
+  // Filtered train list for quick switcher by Zone & Search
   const filteredTrains = useMemo(() => {
-    if (!searchQuery.trim()) return trainsList;
-    const q = searchQuery.trim().toLowerCase();
-    return trainsList.filter(t => 
-      (t.trainNumber && t.trainNumber.toLowerCase().includes(q)) ||
-      (t.name && t.name.toLowerCase().includes(q)) ||
-      (t.originCode && t.originCode.toLowerCase().includes(q)) ||
-      (t.destinationCode && t.destinationCode.toLowerCase().includes(q))
-    );
-  }, [trainsList, searchQuery]);
+    let list = trainsList;
+    if (selectedZone !== 'all') {
+      list = list.filter(t => t.zone === selectedZone || (t.zone && t.zone.includes(selectedZone)));
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(t => 
+        (t.trainNumber && t.trainNumber.toLowerCase().includes(q)) ||
+        (t.name && t.name.toLowerCase().includes(q)) ||
+        (t.originCode && t.originCode.toLowerCase().includes(q)) ||
+        (t.destinationCode && t.destinationCode.toLowerCase().includes(q)) ||
+        (t.zone && t.zone.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [trainsList, searchQuery, selectedZone]);
 
   const currentTrain = useMemo(() => {
-    return trainsList.find(t => t.trainNumber === selectedTrainNumber) || trainsList[0] || null;
-  }, [trainsList, selectedTrainNumber]);
+    return trainsList.find(t => t.trainNumber === selectedTrainNumber) || filteredTrains[0] || trainsList[0] || null;
+  }, [trainsList, filteredTrains, selectedTrainNumber]);
 
   const currentDelay = getTrainDelay(currentTrain, trains);
   const currentBadge = getDelayBadgeInfo(currentDelay);
@@ -64,6 +72,18 @@ export default function FullGISMapView({ onSelectStation }) {
   const currentKm = Math.round(run.currentKm || 140);
   const totalKm = Math.round(run.totalKm || currentTrain?.totalKm || 192);
   const pct = Math.min(100, Math.round((currentKm / (totalKm || 1)) * 100)) || 72;
+
+  const ZONE_TABS = [
+    { id: 'all', label: 'All India' },
+    { id: 'NR', label: 'Northern (NR)' },
+    { id: 'WR', label: 'Western (WR)' },
+    { id: 'CR', label: 'Central (CR)' },
+    { id: 'ER', label: 'Eastern (ER)' },
+    { id: 'SR', label: 'Southern (SR)' },
+    { id: 'SCR', label: 'South Central (SCR)' },
+    { id: 'SWR', label: 'South Western (SWR)' },
+    { id: 'NCR', label: 'North Central (NCR)' },
+  ];
 
   return (
     <div className="space-y-4 font-sans">
@@ -78,10 +98,10 @@ export default function FullGISMapView({ onSelectStation }) {
             </div>
             <div>
               <h1 className="font-bold text-base text-[#0F172A]">
-                Single Train Live Route Map
+                Pan-India Live Route GIS Map
               </h1>
               <p className="text-xs text-[#505f76]">
-                Select any train below to inspect its dedicated route and GPS telemetry
+                Inspect high-precision GPS telemetry across 120+ stations and 500 trains nationwide
               </p>
             </div>
           </div>
@@ -91,7 +111,7 @@ export default function FullGISMapView({ onSelectStation }) {
             <Search className="w-4 h-4 text-[#6e7881] absolute left-3 top-1/2 -translate-y-1/2" />
             <input 
               type="text"
-              placeholder="Search train (e.g. 22225, 11008, Deccan)..."
+              placeholder="Search train (e.g. 22225, Rajdhani, NDLS)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 pr-3 py-1.5 bg-[#f7f9fb] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]/20 w-full font-medium"
@@ -100,9 +120,33 @@ export default function FullGISMapView({ onSelectStation }) {
 
         </div>
 
-        {/* Quick-Select Train Pills Carousel with Identical Realistic Delays as Passenger View */}
+        {/* Zone Filter Tab Pills */}
+        <div className="flex gap-1.5 overflow-x-auto custom-scrollbar pb-1 pt-1 border-t border-[#E2E8F0]">
+          {ZONE_TABS.map(tab => {
+            const count = tab.id === 'all' 
+              ? trainsList.length 
+              : trainsList.filter(t => t.zone === tab.id || (t.zone && t.zone.includes(tab.id))).length;
+            const isTabActive = selectedZone === tab.id;
+
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setSelectedZone(tab.id)}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer border ${
+                  isTabActive
+                    ? 'bg-[#006591] text-white border-[#006591] shadow-sm'
+                    : 'bg-[#f7f9fb] text-[#505f76] border-[#E2E8F0] hover:text-[#0F172A] hover:bg-white'
+                }`}
+              >
+                {tab.label} {count > 0 ? `(${count})` : ''}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Quick-Select Train Pills Carousel */}
         <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-1 pt-1 border-t border-[#E2E8F0]">
-          {filteredTrains.map(t => {
+          {filteredTrains.slice(0, 50).map(t => {
             const isSelected = t.trainNumber === (currentTrain?.trainNumber || selectedTrainNumber);
             const trainDelay = getTrainDelay(t, trains);
             const badge = getDelayBadgeInfo(trainDelay);
@@ -133,7 +177,7 @@ export default function FullGISMapView({ onSelectStation }) {
                   {t.name}
                 </div>
                 <div className={`text-[10px] truncate mt-0.5 ${isSelected ? 'text-white/80' : 'text-[#505f76]'}`}>
-                  {t.originCode || 'CSMT'} → {t.destinationCode || 'SUR'}
+                  {t.originCode || 'NDLS'} → {t.destinationCode || 'HWH'}
                 </div>
               </button>
             );

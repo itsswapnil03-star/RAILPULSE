@@ -45,6 +45,11 @@ export default function ControlRoomView() {
   const { trains, trainsList, networkStats, alerts: socketAlerts, simulatedTime } = useSocket();
   const [selectedTrainNumber, setSelectedTrainNumber] = useState('22225');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedZone, setSelectedZone] = useState('all');
+  const [selectedTrainType, setSelectedTrainType] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 15;
+
   const [predictions, setPredictions] = useState([]);
   const [stations, setStations] = useState([]);
   const [selectedDisruption, setSelectedDisruption] = useState('weather_fog');
@@ -160,17 +165,53 @@ export default function ControlRoomView() {
     return enhancedTrains.find(t => t.trainNumber === selectedTrainNumber) || enhancedTrains[0] || null;
   }, [enhancedTrains, selectedTrainNumber]);
 
-  // Filtered Trains Matrix
+  // Filtered Trains Matrix by Zone, Type, and Search Query
   const filteredTrains = useMemo(() => {
-    if (!searchQuery) return enhancedTrains;
-    const q = searchQuery.toLowerCase();
-    return enhancedTrains.filter(t => 
-      t.trainNumber.toLowerCase().includes(q) ||
-      t.name.toLowerCase().includes(q) ||
-      (t.originCode && t.originCode.toLowerCase().includes(q)) ||
-      (t.destinationCode && t.destinationCode.toLowerCase().includes(q))
-    );
-  }, [enhancedTrains, searchQuery]);
+    let list = enhancedTrains;
+    
+    // 1. Zone Filter
+    if (selectedZone !== 'all') {
+      list = list.filter(t => t.zone === selectedZone || (t.zone && t.zone.includes(selectedZone)));
+    }
+
+    // 2. Type Filter
+    if (selectedTrainType !== 'all') {
+      list = list.filter(t => {
+        const type = (t.trainType || t.type || '').toLowerCase();
+        const name = (t.name || '').toLowerCase();
+        if (selectedTrainType === 'vande_bharat') return type.includes('vande') || name.includes('vande');
+        if (selectedTrainType === 'rajdhani_shatabdi') return type.includes('rajdhani') || type.includes('shatabdi') || name.includes('rajdhani') || name.includes('shatabdi');
+        if (selectedTrainType === 'superfast') return type.includes('superfast') || name.includes('superfast') || name.includes('sf');
+        if (selectedTrainType === 'duronto') return type.includes('duronto') || name.includes('duronto');
+        if (selectedTrainType === 'express') return type.includes('express') || type.includes('mail') || name.includes('express');
+        return true;
+      });
+    }
+
+    // 3. Search Query
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(t => 
+        t.trainNumber.toLowerCase().includes(q) ||
+        t.name.toLowerCase().includes(q) ||
+        (t.originCode && t.originCode.toLowerCase().includes(q)) ||
+        (t.destinationCode && t.destinationCode.toLowerCase().includes(q)) ||
+        (t.zone && t.zone.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [enhancedTrains, searchQuery, selectedZone, selectedTrainType]);
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedZone, selectedTrainType]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredTrains.length / pageSize));
+  const paginatedTrains = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredTrains.slice(start, start + pageSize);
+  }, [filteredTrains, currentPage, pageSize]);
 
   // Fetch ML predictions when selected train changes
   useEffect(() => {
@@ -575,12 +616,17 @@ export default function ControlRoomView() {
             </div>
           )}
 
-          {/* 2. ACTIVE FLEET MATRIX TABLE */}
+          {/* 2. ACTIVE FLEET MATRIX TABLE WITH NATIONWIDE ZONE & TYPE FILTERING */}
           <div className="bg-white rounded-xl border border-[#E2E8F0] shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-[#E2E8F0] flex flex-wrap justify-between items-center gap-3">
               <div>
-                <h3 className="font-bold text-base text-[#0F172A]">Active Fleet Matrix</h3>
-                <p className="text-xs text-[#505f76] mt-0.5">Real-time status across Maharashtra coaching network</p>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-base text-[#0F172A]">Pan-India Active Fleet Matrix</h3>
+                  <span className="bg-[#0ea5e9]/10 text-[#006591] text-[11px] font-bold px-2 py-0.5 rounded font-mono">
+                    {filteredTrains.length} Active Trains
+                  </span>
+                </div>
+                <p className="text-xs text-[#505f76] mt-0.5">Real-time status across 120+ junctions & 18 Railway Zones</p>
               </div>
 
               {/* Search Box */}
@@ -588,7 +634,7 @@ export default function ControlRoomView() {
                 <Search className="w-4 h-4 text-[#6e7881] absolute left-3 top-1/2 -translate-y-1/2" />
                 <input 
                   type="text"
-                  placeholder="Filter trains..."
+                  placeholder="Filter by train #, name, station..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9 pr-3 py-1.5 bg-[#f7f9fb] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]/20 w-full"
@@ -596,67 +642,176 @@ export default function ControlRoomView() {
               </div>
             </div>
 
+            {/* Zone & Train Type Filter Bar */}
+            <div className="px-6 py-2.5 bg-[#f7f9fb] border-b border-[#E2E8F0] flex flex-wrap items-center justify-between gap-3 text-xs">
+              {/* Zone Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar max-w-full pb-1">
+                {[
+                  { id: 'all', label: 'All Zones' },
+                  { id: 'NR', label: 'NR (Northern)' },
+                  { id: 'WR', label: 'WR (Western)' },
+                  { id: 'CR', label: 'CR (Central)' },
+                  { id: 'ER', label: 'ER (Eastern)' },
+                  { id: 'SR', label: 'SR (Southern)' },
+                  { id: 'SCR', label: 'SCR (South Central)' },
+                  { id: 'SWR', label: 'SWR (South Western)' },
+                  { id: 'NCR', label: 'NCR (North Central)' },
+                ].map(z => (
+                  <button
+                    key={z.id}
+                    onClick={() => setSelectedZone(z.id)}
+                    className={`px-2.5 py-1 rounded-md font-semibold text-[11px] transition-all cursor-pointer border ${
+                      selectedZone === z.id
+                        ? 'bg-[#006591] text-white border-[#006591] shadow-xs'
+                        : 'bg-white text-[#505f76] border-[#E2E8F0] hover:text-[#0F172A]'
+                    }`}
+                  >
+                    {z.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Service Type Dropdown */}
+              <div className="flex items-center gap-2">
+                <span className="text-[#505f76] text-[11px] font-semibold">Service:</span>
+                <select
+                  value={selectedTrainType}
+                  onChange={(e) => setSelectedTrainType(e.target.value)}
+                  className="bg-white border border-[#E2E8F0] text-[#0F172A] rounded-md px-2.5 py-1 text-[11px] font-semibold focus:outline-none focus:ring-1 focus:ring-[#0ea5e9]"
+                >
+                  <option value="all">All Service Types</option>
+                  <option value="vande_bharat">Vande Bharat Express</option>
+                  <option value="rajdhani_shatabdi">Rajdhani / Shatabdi</option>
+                  <option value="superfast">Superfast Express</option>
+                  <option value="duronto">Duronto Express</option>
+                  <option value="express">Mail / Express</option>
+                </select>
+              </div>
+            </div>
+
             <div className="overflow-x-auto custom-scrollbar">
               <table className="w-full text-left border-collapse font-sans text-xs">
                 <thead>
                   <tr className="bg-[#f7f9fb] text-[11px] font-bold text-[#505f76] uppercase tracking-wider border-b border-[#E2E8F0]">
-                    <th className="px-6 py-3.5 font-semibold">Train ID</th>
-                    <th className="px-6 py-3.5 font-semibold">Status</th>
-                    <th className="px-6 py-3.5 font-semibold">Speed</th>
-                    <th className="px-6 py-3.5 font-semibold">ETA / Delay</th>
+                    <th className="px-6 py-3.5 font-semibold">Train Service</th>
+                    <th className="px-4 py-3.5 font-semibold">Zone & Route</th>
+                    <th className="px-4 py-3.5 font-semibold">Status</th>
+                    <th className="px-4 py-3.5 font-semibold">Speed</th>
+                    <th className="px-4 py-3.5 font-semibold">ETA / Delay</th>
                     <th className="px-6 py-3.5 font-semibold text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E2E8F0] text-[#0F172A]">
-                  {filteredTrains.map(t => {
-                    const isSel = selectedTrain?.trainNumber === t.trainNumber;
-                    const delayed = t.currentDelay > 5;
+                  {paginatedTrains.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-[#505f76]">
+                        No trains found matching the selected zone and search filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedTrains.map(t => {
+                      const isSel = selectedTrain?.trainNumber === t.trainNumber;
+                      const delayed = t.currentDelay > 5;
 
-                    return (
-                      <tr 
-                        key={t.trainNumber}
-                        onClick={() => setSelectedTrainNumber(t.trainNumber)}
-                        className={`hover:bg-[#f7f9fb] transition-colors cursor-pointer ${
-                          isSel ? 'bg-[#d0e1fb]/30 font-semibold' : ''
-                        }`}
-                      >
-                        <td className="px-6 py-4 font-mono">
-                          <div className="font-bold text-[#0F172A]">{t.name}</div>
-                          <div className="text-[11px] text-[#0ea5e9]">#{t.trainNumber}</div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-semibold border ${
-                            delayed 
-                              ? 'bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/20' 
-                              : 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20'
-                          }`}>
-                            {delayed ? 'Delayed' : 'On Time'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 font-mono font-medium">
-                          {t.currentSpeed || 85} <span className="text-[10px] text-[#6e7881]">km/h</span>
-                        </td>
-                        <td className="px-6 py-4 font-mono font-bold">
-                          <span className={delayed ? 'text-[#EF4444]' : 'text-[#10B981]'}>
-                            {t.currentDelay > 0 ? `+${t.currentDelay}m` : '0m'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-right font-medium">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedTrainNumber(t.trainNumber);
-                            }}
-                            className="text-[#0ea5e9] hover:text-[#006591] font-semibold cursor-pointer"
-                          >
-                            {isSel ? 'Monitoring' : 'View'}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                      return (
+                        <tr 
+                          key={t.trainNumber}
+                          onClick={() => setSelectedTrainNumber(t.trainNumber)}
+                          className={`hover:bg-[#f7f9fb] transition-colors cursor-pointer ${
+                            isSel ? 'bg-[#d0e1fb]/30 font-semibold' : ''
+                          }`}
+                        >
+                          <td className="px-6 py-3.5 font-mono">
+                            <div className="font-bold text-[#0F172A]">{t.name}</div>
+                            <div className="text-[11px] text-[#0ea5e9]">#{t.trainNumber}</div>
+                          </td>
+                          <td className="px-4 py-3.5 font-mono">
+                            <div className="font-bold text-[#006591] flex items-center gap-1.5">
+                              <span>{t.originCode || 'NDLS'}</span>
+                              <span className="text-[#6e7881]">→</span>
+                              <span>{t.destinationCode || 'HWH'}</span>
+                            </div>
+                            <div className="text-[10px] text-[#6e7881] font-semibold mt-0.5">
+                              {t.zone ? `Zone: ${t.zone}` : 'Indian Railways'}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-semibold border ${
+                              delayed 
+                                ? 'bg-[#EF4444]/10 text-[#EF4444] border-[#EF4444]/20' 
+                                : 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20'
+                            }`}>
+                              {delayed ? 'Delayed' : 'On Time'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 font-mono font-medium">
+                            {t.currentSpeed || 85} <span className="text-[10px] text-[#6e7881]">km/h</span>
+                          </td>
+                          <td className="px-4 py-3.5 font-mono font-bold">
+                            <span className={delayed ? 'text-[#EF4444]' : 'text-[#10B981]'}>
+                              {t.currentDelay > 0 ? `+${t.currentDelay}m` : '0m'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-3.5 text-right font-medium">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedTrainNumber(t.trainNumber);
+                              }}
+                              className="text-[#0ea5e9] hover:text-[#006591] font-semibold cursor-pointer"
+                            >
+                              {isSel ? 'Monitoring' : 'View'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="px-6 py-3.5 bg-[#f7f9fb] border-t border-[#E2E8F0] flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="text-[#505f76] font-medium">
+                Showing <span className="font-bold text-[#0F172A]">{(currentPage - 1) * pageSize + 1}</span> to{' '}
+                <span className="font-bold text-[#0F172A]">{Math.min(currentPage * pageSize, filteredTrains.length)}</span> of{' '}
+                <span className="font-bold text-[#0F172A]">{filteredTrains.length}</span> trains
+              </div>
+
+              <div className="flex items-center gap-2 font-mono">
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="px-2.5 py-1 rounded bg-white border border-[#E2E8F0] text-[#0F172A] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#E2E8F0] transition-colors cursor-pointer"
+                >
+                  « First
+                </button>
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-2.5 py-1 rounded bg-white border border-[#E2E8F0] text-[#0F172A] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#E2E8F0] transition-colors cursor-pointer"
+                >
+                  ‹ Prev
+                </button>
+                <span className="px-3 py-1 font-bold text-[#006591] bg-white border border-[#006591]/30 rounded">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-2.5 py-1 rounded bg-white border border-[#E2E8F0] text-[#0F172A] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#E2E8F0] transition-colors cursor-pointer"
+                >
+                  Next ›
+                </button>
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="px-2.5 py-1 rounded bg-white border border-[#E2E8F0] text-[#0F172A] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#E2E8F0] transition-colors cursor-pointer"
+                >
+                  Last »
+                </button>
+              </div>
             </div>
           </div>
 

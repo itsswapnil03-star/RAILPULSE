@@ -6,7 +6,11 @@
 const BUFFER_WINDOW_MINUTES = 6;
 
 const TRAIN_PRIORITY = {
-  'Semi-high-speed': 100, // Vande Bharat
+  'Vande Bharat': 100,
+  'Semi-high-speed': 100,
+  'Rajdhani': 95,
+  'Shatabdi': 90,
+  'Duronto': 85,
   'Superfast': 80,
   'Intercity': 70,
   'Express': 60,

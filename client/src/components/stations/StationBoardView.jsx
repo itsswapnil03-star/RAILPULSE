@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { fetchStations, fetchStationBoard } from '../../services/api';
 import { formatTime } from '../../utils/formatTime';
+import { PAN_INDIA_STATIONS_FALLBACK } from '../../data/fallbackData';
 import { 
   AlertTriangle, 
   TrendingUp, 
@@ -13,11 +14,12 @@ import {
   Train,
   ArrowDownLeft,
   ArrowUpRight,
-  Filter
+  Filter,
+  ChevronDown
 } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
 
-export default function StationBoardView({ initialStationCode = 'PUNE' }) {
+export default function StationBoardView({ initialStationCode = 'NDLS' }) {
   const { simulatedTime, alerts, trainsList } = useSocket();
   const [stationCode, setStationCode] = useState(initialStationCode);
   const [stations, setStations] = useState([]);
@@ -32,8 +34,14 @@ export default function StationBoardView({ initialStationCode = 'PUNE' }) {
     async function loadStations() {
       try {
         const list = await fetchStations();
-        setStations(list || []);
-      } catch (e) {}
+        if (list && list.length > 0) {
+          setStations(list);
+        } else {
+          setStations(PAN_INDIA_STATIONS_FALLBACK);
+        }
+      } catch (e) {
+        setStations(PAN_INDIA_STATIONS_FALLBACK);
+      }
     }
     loadStations();
   }, []);
@@ -67,11 +75,23 @@ export default function StationBoardView({ initialStationCode = 'PUNE' }) {
     };
   }, [stationCode]);
 
+  // Group stations by Zone for clean dropdown navigation
+  const groupedStations = useMemo(() => {
+    const list = stations.length > 0 ? stations : PAN_INDIA_STATIONS_FALLBACK;
+    const groups = {};
+    list.forEach(st => {
+      const zone = st.zone || 'Other';
+      if (!groups[zone]) groups[zone] = [];
+      groups[zone].push(st);
+    });
+    return groups;
+  }, [stations]);
+
   // Current Station object
   const currentStation = useMemo(() => {
     return stations.find(s => s.code === stationCode) || {
       code: stationCode,
-      name: stationCode === 'PUNE' ? 'Pune Junction' : stationCode === 'CSMT' ? 'Mumbai CSMT' : `${stationCode} Station`
+      name: stationCode === 'NDLS' ? 'New Delhi' : stationCode === 'CSMT' ? 'Mumbai CSMT' : `${stationCode} Station`
     };
   }, [stations, stationCode]);
 
@@ -246,20 +266,35 @@ export default function StationBoardView({ initialStationCode = 'PUNE' }) {
         {/* Table Top Controls & Direction Tabs */}
         <div className="p-5 border-b border-[#E2E8F0] flex flex-wrap justify-between items-center gap-4 bg-white">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-[#0ea5e9]/10 text-[#006591] flex items-center justify-center font-bold">
+            <div className="w-9 h-9 rounded-lg bg-[#0ea5e9]/10 text-[#006591] flex items-center justify-center font-bold shrink-0">
               <Train className="w-5 h-5 text-[#006591]" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="font-bold text-lg text-[#0F172A] tracking-tight">
-                  {currentStation.name}
-                </h2>
+                <div className="relative inline-flex items-center">
+                  <select
+                    value={stationCode}
+                    onChange={(e) => setStationCode(e.target.value)}
+                    className="font-bold text-lg text-[#0F172A] tracking-tight bg-transparent border-b border-dashed border-[#0ea5e9] pr-6 outline-none cursor-pointer appearance-none hover:text-[#006591]"
+                  >
+                    {Object.keys(groupedStations).sort().map(zone => (
+                      <optgroup key={zone} label={`Zone: ${zone}`}>
+                        {groupedStations[zone].map(s => (
+                          <option key={s.code} value={s.code}>
+                            {s.name} ({s.code})
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-[#006591] pointer-events-none absolute right-0" />
+                </div>
                 <span className="px-2 py-0.5 rounded bg-[#0ea5e9]/10 text-[#006591] font-mono text-xs font-bold">
                   {stationCode}
                 </span>
               </div>
               <p className="text-xs text-[#505f76] mt-0.5">
-                Dynamic platform occupancy & ML arrival forecasts
+                Dynamic platform occupancy & ML arrival forecasts across 120+ junctions
               </p>
             </div>
           </div>
