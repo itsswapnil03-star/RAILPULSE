@@ -118,14 +118,14 @@ export default function FullGISMapView({ onSelectStation }) {
           </div>
 
           {/* Quick Search */}
-          <div className="relative w-64">
-            <Search className="w-4 h-4 text-[#6e7881] absolute left-3 top-1/2 -translate-y-1/2" />
+          <div className="relative w-80">
+            <Search className="w-4 h-4 text-[#006591] absolute left-3 top-1/2 -translate-y-1/2" />
             <input 
               type="text"
-              placeholder="Search train (e.g. 22225, Rajdhani, NDLS)..."
+              placeholder="Search train # or name (e.g. 22225, Vande Bharat)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-3 py-1.5 bg-[#f7f9fb] border border-[#E2E8F0] rounded-lg text-xs text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]/20 w-full font-medium"
+              className="pl-9 pr-3 py-2 bg-[#f7f9fb] border border-[#E2E8F0] rounded-xl text-xs text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]/20 w-full font-medium"
             />
           </div>
 

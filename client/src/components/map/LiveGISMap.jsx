@@ -287,10 +287,36 @@ export default function LiveGISMap({
 }) {
   const [isFleetVisible, setIsFleetVisible] = React.useState(showAllTrains);
   const [recenterCount, setRecenterCount] = React.useState(0);
+  const [trainSearch, setTrainSearch] = React.useState('');
+  const [showTrainList, setShowTrainList] = React.useState(false);
+  const searchRef = React.useRef(null);
 
   const stationsMap = useMemo(() => {
     return new Map(stations.map(s => [s.code, s]));
   }, [stations]);
+
+  // Click outside to close train search suggestions
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (searchRef.current && !searchRef.current.contains(e.target)) {
+        setShowTrainList(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Filtered train suggestions for autocomplete
+  const trainSuggestions = useMemo(() => {
+    if (!trainSearch.trim()) return [];
+    const q = trainSearch.trim().toLowerCase();
+    return trains.filter(t => 
+      String(t.trainNumber).toLowerCase().includes(q) ||
+      (t.name && t.name.toLowerCase().includes(q)) ||
+      (t.originCode && t.originCode.toLowerCase().includes(q)) ||
+      (t.destinationCode && t.destinationCode.toLowerCase().includes(q))
+    ).slice(0, 8);
+  }, [trains, trainSearch]);
 
   // Find the single active selected train
   const targetTrain = useMemo(() => {
@@ -404,6 +430,75 @@ export default function LiveGISMap({
             Route: <b>{targetTrain?.originCode || 'NDLS'} → {targetTrain?.destinationCode || 'HWH'}</b> ({routeData.stationsOnRoute.length} Halts) · Live GPS Active
           </div>
         </div>
+      </div>
+
+      {/* Top Center Floating Train Search Bar with Autocomplete */}
+      <div ref={searchRef} className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] w-72 sm:w-80 font-sans">
+        <div className="relative">
+          <span className="text-[#006591] absolute left-3 top-1/2 -translate-y-1/2 text-xs">🔍</span>
+          <input
+            type="text"
+            placeholder="Search train # or name..."
+            value={trainSearch}
+            onFocus={() => setShowTrainList(true)}
+            onChange={(e) => {
+              setTrainSearch(e.target.value);
+              setShowTrainList(true);
+            }}
+            className="w-full pl-8 pr-7 py-2 bg-white/95 backdrop-blur-md border border-[#E2E8F0] rounded-xl text-xs font-semibold text-[#0F172A] shadow-md focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]/40"
+          />
+          {trainSearch && (
+            <button
+              onClick={() => {
+                setTrainSearch('');
+                setShowTrainList(false);
+              }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#6e7881] hover:text-[#0F172A] text-xs font-bold"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* Autocomplete Suggestions Box */}
+        {showTrainList && trainSuggestions.length > 0 && (
+          <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-[#E2E8F0] rounded-xl shadow-xl z-[1100] max-h-64 overflow-y-auto custom-scrollbar divide-y divide-[#E2E8F0]">
+            <div className="px-3 py-1.5 bg-[#f7f9fb] text-[10px] font-bold text-[#505f76] uppercase tracking-wider flex justify-between">
+              <span>Matching Trains ({trainSuggestions.length})</span>
+              <span className="text-[#0ea5e9]">Click to view</span>
+            </div>
+            {trainSuggestions.map(tItem => {
+              const delayVal = getTrainDelay(tItem);
+              return (
+                <div
+                  key={tItem.trainNumber}
+                  onClick={() => {
+                    onSelectTrain(tItem.trainNumber);
+                    setTrainSearch(tItem.trainNumber);
+                    setShowTrainList(false);
+                    setRecenterCount(c => c + 1);
+                  }}
+                  className="px-3 py-2 flex items-center justify-between hover:bg-[#f2f4f6] cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-[#006591] bg-[#0ea5e9]/10 px-1.5 py-0.5 rounded">
+                      #{tItem.trainNumber}
+                    </span>
+                    <div className="truncate max-w-[130px]">
+                      <div className="text-xs font-bold text-[#0F172A] truncate">{tItem.name}</div>
+                      <div className="text-[10px] text-[#505f76]">{tItem.originCode} → {tItem.destinationCode}</div>
+                    </div>
+                  </div>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded font-mono ${
+                    delayVal > 10 ? 'bg-[#EF4444]/10 text-[#EF4444]' : delayVal > 0 ? 'bg-[#F59E0B]/10 text-[#F59E0B]' : 'bg-[#10B981]/10 text-[#10B981]'
+                  }`}>
+                    {delayVal > 0 ? `+${delayVal}m` : 'ON TIME'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Top Right Floating View Mode Switcher */}

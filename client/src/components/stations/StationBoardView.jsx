@@ -63,6 +63,7 @@ export default function StationBoardView({ initialStationCode = 'NDLS', onSelect
   // Load Board Data
   useEffect(() => {
     let isMounted = true;
+    setBoardData(null);
     async function loadBoard() {
       setLoading(true);
       try {
@@ -107,7 +108,7 @@ export default function StationBoardView({ initialStationCode = 'NDLS', onSelect
     let list = [];
 
     // 1. Prioritize backend real-time arrival board for this exact station
-    if (boardData && Array.isArray(boardData.arrivals) && boardData.arrivals.length > 0) {
+    if (boardData && (boardData.station?.code === stationCode || !boardData.station) && Array.isArray(boardData.arrivals) && boardData.arrivals.length > 0) {
       list = boardData.arrivals.map((arr, idx) => {
         const isArrival = arr.to === currentStation.name || arr.to === stationCode || (idx % 2 === 0);
         return {
