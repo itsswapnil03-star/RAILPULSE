@@ -607,7 +607,7 @@ export default function ControlRoomView() {
                       trains={enhancedTrains}
                       selectedTrainNumber={selectedTrain.trainNumber}
                       height="260px"
-                      showAllTrains={true}
+                      showAllTrains={false}
                     />
                   </div>
                 )}

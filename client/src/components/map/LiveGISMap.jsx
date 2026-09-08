@@ -173,9 +173,11 @@ export default function LiveGISMap({
   selectedTrainNumber = null, 
   onSelectTrain = () => {}, 
   onSelectStation = () => {},
-  showAllTrains = true,
+  showAllTrains = false,
   height = '360px'
 }) {
+  const [isFleetVisible, setIsFleetVisible] = React.useState(showAllTrains);
+
   const stationsMap = useMemo(() => {
     return new Map(stations.map(s => [s.code, s]));
   }, [stations]);
@@ -248,7 +250,7 @@ export default function LiveGISMap({
 
   // Interpolated live train positions for the entire fleet across India
   const fleetPositions = useMemo(() => {
-    if (!showAllTrains) return [];
+    if (!isFleetVisible) return [];
     // Limit to 200 trains simultaneously on the map for 60fps performance
     return trains.slice(0, 200).map(t => {
       const pos = interpolateTrainPosition(t, stationsMap);
@@ -264,7 +266,7 @@ export default function LiveGISMap({
         isTarget: t.trainNumber === targetTrain?.trainNumber
       };
     }).filter(t => t.lat && t.lng);
-  }, [trains, stationsMap, targetTrain, showAllTrains]);
+  }, [trains, stationsMap, targetTrain, isFleetVisible]);
 
   // Interpolated live train position for selected train
   const liveTrainPos = useMemo(() => {
@@ -280,7 +282,7 @@ export default function LiveGISMap({
   return (
     <div className="w-full rounded-xl overflow-hidden border border-[#E2E8F0] relative shadow-md bg-white" style={{ height }}>
       
-      {/* Top Floating Badge with Route Info */}
+      {/* Top Left Floating Badge with Route Info */}
       <div className="absolute top-3 left-3 z-[1000] bg-white/95 backdrop-blur-md px-4 py-2 rounded-xl border border-[#E2E8F0] flex items-center gap-3 text-xs font-sans shadow-md">
         <span className="w-2.5 h-2.5 rounded-full bg-[#10B981] animate-pulse" />
         <div>
@@ -289,9 +291,35 @@ export default function LiveGISMap({
             <span className="font-mono text-[#006591]">#{targetTrain?.trainNumber}</span>
           </div>
           <div className="text-[11px] text-[#505f76] mt-0.5">
-            Route: <b>{targetTrain?.originCode || 'NDLS'} → {targetTrain?.destinationCode || 'HWH'}</b> ({routeData.stationsOnRoute.length} Halts) · Fleet: <b>{trains.length} Trains</b>
+            Route: <b>{targetTrain?.originCode || 'NDLS'} → {targetTrain?.destinationCode || 'HWH'}</b> ({routeData.stationsOnRoute.length} Halts) · Live GPS Active
           </div>
         </div>
+      </div>
+
+      {/* Top Right Floating View Mode Switcher */}
+      <div className="absolute top-3 right-3 z-[1000] bg-white/95 backdrop-blur-md p-1 rounded-xl border border-[#E2E8F0] flex items-center gap-1 shadow-md text-xs font-sans">
+        <button
+          onClick={() => setIsFleetVisible(false)}
+          className={`px-3 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+            !isFleetVisible
+              ? 'bg-[#006591] text-white shadow-sm'
+              : 'text-[#505f76] hover:text-[#0F172A] hover:bg-[#f7f9fb]'
+          }`}
+          title="Show only the selected train and its scheduled halts"
+        >
+          <span>🎯</span> Selected Train
+        </button>
+        <button
+          onClick={() => setIsFleetVisible(true)}
+          className={`px-3 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+            isFleetVisible
+              ? 'bg-[#006591] text-white shadow-sm'
+              : 'text-[#505f76] hover:text-[#0F172A] hover:bg-[#f7f9fb]'
+          }`}
+          title="Show all concurrent trains across India"
+        >
+          <span>🌐</span> All Fleet ({trains.length})
+        </button>
       </div>
 
       <MapContainer
@@ -310,8 +338,8 @@ export default function LiveGISMap({
         {/* Auto fit map to this train's route */}
         <MapAutoBounds bounds={routeData.bounds} center={liveTrainPos} />
 
-        {/* 1. Nationwide Railway Junction Nodes (Background Network) */}
-        {stations.map(st => {
+        {/* 1. Nationwide Railway Junction Nodes (Only shown when Fleet mode is toggled) */}
+        {isFleetVisible && stations.map(st => {
           if (routeStationCodes.has(st.code)) return null; // Rendered with higher priority below
           if (!st.lat || !st.lng) return null;
 
@@ -381,8 +409,8 @@ export default function LiveGISMap({
           </Marker>
         ))}
 
-        {/* 5. Other Active Trains Across India (Compact Markers) */}
-        {fleetPositions.map(t => {
+        {/* 5. Other Active Trains Across India (Only shown when Fleet mode is toggled) */}
+        {isFleetVisible && fleetPositions.map(t => {
           if (t.isTarget) return null; // Rendered with large photo badge below
 
           return (

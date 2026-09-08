@@ -255,7 +255,7 @@ export default function FullGISMapView({ onSelectStation }) {
             trains={filteredTrains.length > 0 ? filteredTrains : trainsList}
             selectedTrainNumber={selectedTrainNumber}
             onSelectTrain={(num) => setSelectedTrainNumber(num)}
-            showAllTrains={true}
+            showAllTrains={false}
             height="100%"
           />
         </div>
